@@ -10,10 +10,14 @@ typedef struct {
     OFFSET start;
     OFFSET last;
     long cnt;
+    size_t next_index_cache[ALLOC_CACHE_SIZE];
+    size_t next_data_cache[ALLOC_CACHE_SIZE];
+    int next_index_pos;
+    int next_data_pos;
     CONCURRENT_T concurrent;
 } QUEUE_HEADER_T;
 
-typedef QUEUE_HEADER_T* QUEUE_HEADER;
+typedef QUEUE_HEADER_T *QUEUE_HEADER;
 
 typedef struct {
     QUEUE_HEADER header;

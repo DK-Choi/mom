@@ -5,10 +5,16 @@
 #include "mom_collection.h"
 #include "mom_shared_queue.h"
 
-#define BUCKET_SIZE 128
+#define BUCKET_SIZE 1024
+#define POS_CACHE_SIZE 128
 
 typedef struct {
     char c_use;
+    size_t max_size;
+    size_t next_index_cache[ALLOC_CACHE_SIZE];
+    size_t next_data_cache[ALLOC_CACHE_SIZE];
+    int next_index_pos;
+    int next_data_pos;
     QUEUE_HEADER_T bucket[BUCKET_SIZE];
     CONCURRENT_T concurrent;
 } MAP_HEADER_T;
@@ -27,7 +33,7 @@ typedef MAP_T* MAP;
 extern "C" {
 #endif
 
-MAP mom_create_shared_map(RESOURCE resource, size_t max_size, RESULT_DETAIL result_detail);
+MAP mom_create_shared_map(RESOURCE resource, size_t max_size, BOOL recreate_mode, RESULT_DETAIL result_detail);
 
 RESULT mom_destroy_shared_map(MAP this, RESULT_DETAIL result_detail);
 

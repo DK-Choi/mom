@@ -25,6 +25,7 @@ enum CONCURRENT_TYPE {
 #define ORDER_ASC  1
 #define ORDER_DSC  -1
 #define MAX_NAME_SZ 255
+#define ALLOC_CACHE_SIZE 128
 
 typedef char *STRING;
 typedef void *HANDLE;

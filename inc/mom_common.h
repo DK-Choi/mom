@@ -35,7 +35,7 @@ RESULT mom_concurrent_lock(CONCURRENT concurrent, BOOL trymod);
 
 RESULT mom_concurrent_rdlock(CONCURRENT concurrent, BOOL trymod);
 
-RESULT mom_concurrent_wrlock(CONCURRENT concurrent, BOOL trymod);
+RESULT mom_concurrent_rwlock(CONCURRENT concurrent, BOOL trymod);
 
 RESULT mom_concurrent_wait(CONCURRENT concurrent, BOOL include_lock, TIMESTAMP timeout);
 

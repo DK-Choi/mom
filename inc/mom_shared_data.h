@@ -29,7 +29,7 @@ RESULT mom_set_shared_data(DATA this, ADDRESS data, size_t size, RESULT_DETAIL r
 
 ADDRESS mom_get_shared_data(DATA this, RESULT_DETAIL result_detail);
 
-RESULT destroy_shared_data(DATA this, RESULT_DETAIL result_detail);
+RESULT mom_destroy_shared_data(DATA this, RESULT_DETAIL result_detail);
 
 #ifdef  __cplusplus
 extern }

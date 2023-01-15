@@ -102,7 +102,6 @@ RESOURCE mom_create_resource_file(STRING name, STRING path, CAPACITY capacity) {
         ftruncate(this->fd, this->capacity);
         this->addr = mmap(0, capacity, PROT_WRITE | PROT_READ, MAP_SHARED, this->fd, 0);
         if (this->addr == NULL) goto END;
-        close(this->fd);
     }
 
     END:
@@ -132,7 +131,7 @@ RESOURCE create_resource_local(STRING name, CAPACITY capacity) {
 
 }
 
-RESULT destroy_resource(RESOURCE this) {
+RESULT mom_destroy_resource(RESOURCE this) {
 
     ASSERT_ADDRESS(this, FAIL_UNDEF, RESULT);
 
@@ -143,9 +142,12 @@ RESULT destroy_resource(RESOURCE this) {
                 break;
             case TYPE_FILE:
                 munmap(this->addr, this->capacity);
+                close(this->fd);
                 break;
             case TYPE_SHM:
+                munmap(this->addr, this->capacity);
                 shm_unlink(this->name);
+                close(this->fd);
                 break;
         }
     }

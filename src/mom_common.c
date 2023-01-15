@@ -151,23 +151,23 @@ RESULT mom_concurrent_rdlock(CONCURRENT concurrent, BOOL trymod) {
 
 }
 
-RESULT mom_concurrent_wrlock(CONCURRENT concurrent, BOOL trymod) {
+RESULT mom_concurrent_rwlock(CONCURRENT concurrent, BOOL trymod) {
 
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
 
     int rc;
-
     for (int i = 0; i < 10; i++) {
         if (trymod == TRUE) {
             rc = pthread_rwlock_trywrlock(&concurrent->rwlock);
         } else {
             rc = pthread_rwlock_wrlock(&concurrent->rwlock);
         }
+        int rc2;
         if (rc != SUCCESS) {
             switch (__get_error_no__(rc)) {
                 case NEED_TO_INIT:
-                    if ((rc = mom_concurrent_reinit(concurrent, RWLOCK)) != SUCCESS) {
-                        return rc;
+                    if ((rc2 = mom_concurrent_reinit(concurrent, RWLOCK)) != SUCCESS) {
+                        return rc2;
                     }
                     break;
                 case NEED_TO_RETRY:
@@ -180,9 +180,7 @@ RESULT mom_concurrent_wrlock(CONCURRENT concurrent, BOOL trymod) {
             break;
         }
     }
-
-    return SUCCESS;
-
+    return rc;
 }
 
 RESULT mom_concurrent_wait(CONCURRENT concurrent, BOOL include_lock, TIMESTAMP timeout) {
@@ -245,9 +243,7 @@ RESULT mom_concurrent_wait(CONCURRENT concurrent, BOOL include_lock, TIMESTAMP t
 RESULT mom_concurrent_unlock(CONCURRENT concurrent) {
 
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
-
     pthread_mutex_unlock(&concurrent->mutex);
-
     return SUCCESS;
 
 }
@@ -255,9 +251,7 @@ RESULT mom_concurrent_unlock(CONCURRENT concurrent) {
 RESULT mom_concurrent_rwunlock(CONCURRENT concurrent) {
 
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
-
     pthread_rwlock_unlock(&concurrent->rwlock);
-
     return SUCCESS;
 
 }

@@ -56,7 +56,7 @@ DATA mom_create_shared_data(size_t size, BOOL is_map, RESULT_DETAIL result) {
     ASSERT_IF_FAIL_CALL_AND_SET_RESULT(ASSERT_ADDRESS_COND(this->data), free(this), NULL, ADDRESS,
                                        result, FAIL_INVALID_SIZE, "check size: input size=%zu", size);
 
-    memset(this->data, 0x00, size);
+    //memset(this->data, 0x00, size);
 
     return this;
 

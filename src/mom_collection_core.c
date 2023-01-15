@@ -56,30 +56,90 @@ static OFFSET get_data_offset(COLLECTION collection, data_info_t *p) {
     return (OFFSET) p - (OFFSET) collection->data_base;
 }
 
-static index_info_t *hi_alloc(COLLECTION collection) {
-    ASSERT_ADDRESS(collection, NULL, ADDRESS);
-    for (int i = 0; i < collection->max_size; i++) {
-        index_info_t *p = collection->index_base + i * (sizeof(index_info_t));
-        if (p != NULL && p->c_use != USE) {
-            p->next = INIT_OFFSET;
-            p->c_use = USE;
-            return p;
+static index_info_t *hi_node_alloc(COLLECTION collection) {
+
+    *collection->p_index_pos = *collection->p_index_pos - 1;
+    if (*collection->p_index_pos < 0) {
+        *collection->p_index_pos = 0;
+        for (int i = collection->p_index_cache[0] + 1;
+             i < collection->max_size && *collection->p_index_pos < ALLOC_CACHE_SIZE; i++) {
+            index_info_t *p = collection->index_base + i * (sizeof(index_info_t));
+            if (p != NULL && p->c_use != USE) {
+                collection->p_index_cache[ALLOC_CACHE_SIZE - *collection->p_index_pos - 1] = i;
+                *collection->p_index_pos = *collection->p_index_pos + 1;
+            }
         }
+        return hi_node_alloc(collection);
+    }
+    size_t idx = collection->p_index_cache[*collection->p_index_pos];
+
+    index_info_t *p = collection->index_base + idx * (sizeof(index_info_t));
+    if (p != NULL && p->c_use != USE) {
+        p->next = INIT_OFFSET;
+        p->c_use = USE;
+        return p;
     }
 
     return NULL;
 }
 
-static void hi_free(index_info_t *p) {
-    ASSERT_ADDRESS(p, NULL, void);
+static void hi_node_free(COLLECTION collection, index_info_t *p) {
     memset(p, 0x00, sizeof(index_info_t));
+    p->c_use = NOT_USE;
+    p->next = INIT_OFFSET;
+    collection->p_index_cache[*collection->p_index_pos] = get_index_offset(collection, p) / sizeof(index_info_t);
+    *collection->p_index_pos = *collection->p_index_pos + 1;
 }
 
+static index_info_t *hi_alloc(COLLECTION collection) {
+
+    ASSERT_ADDRESS(collection, NULL, ADDRESS);
+    ASSERT_BOOL(mom_concurrent_lock(&collection->resource->concurrent, FALSE) == SUCCESS, NULL, ADDRESS);
+    index_info_t *indexInfo = hi_node_alloc(collection);
+    mom_concurrent_unlock(&collection->resource->concurrent);
+    return indexInfo;
+}
+
+static void hi_free(COLLECTION collection, index_info_t *p) {
+    ASSERT_ADDRESS(p, NULL, void);
+    ASSERT_BOOL(mom_concurrent_lock(&collection->resource->concurrent, FALSE) == SUCCESS, NULL, void);
+    hi_node_free(collection, p);
+    mom_concurrent_unlock(&collection->resource->concurrent);
+}
+
+static data_info_t *hd_node_alloc(COLLECTION collection) {
+    *collection->p_data_pos = *collection->p_data_pos - 1;
+    if (*collection->p_data_pos < 0) {
+        *collection->p_data_pos = 0;
+        for (int i = collection->p_data_cache[0] + 1;
+             i < collection->max_data_size && *collection->p_data_pos < ALLOC_CACHE_SIZE; i++) {
+            data_info_t *p = collection->data_base + i * (sizeof(data_info_t));
+            if (p != NULL && p->c_use != USE) {
+                collection->p_data_cache[ALLOC_CACHE_SIZE - *collection->p_data_pos - 1] = i;
+                *collection->p_data_pos = *collection->p_data_pos + 1;
+            }
+        }
+        return hd_node_alloc(collection);
+    }
+    size_t idx = collection->p_data_cache[*collection->p_data_pos];
+
+    return collection->data_base + idx * (sizeof(data_info_t));
+
+}
+
+static void hd_node_free(COLLECTION collection, data_info_t *p) {
+    memset(p, 0x00, sizeof(data_info_t));
+    p->c_use = NOT_USE;
+    p->next = INIT_OFFSET;
+    collection->p_data_cache[*collection->p_data_pos] = get_data_offset(collection, p) / sizeof(data_info_t);
+    *collection->p_data_pos = *collection->p_data_pos + 1;
+}
 
 static data_info_t *hd_alloc(COLLECTION collection, size_t size) {
 
     ASSERT_ADDRESS(collection, NULL, ADDRESS);
     ASSERT_SIZE(size, NULL, ADDRESS);
+    ASSERT_BOOL(mom_concurrent_lock(&collection->resource->concurrent, FALSE) == SUCCESS, NULL, ADDRESS);
 
     int fragment_size = size / CHUNK_SIZE;
 
@@ -96,49 +156,47 @@ static data_info_t *hd_alloc(COLLECTION collection, size_t size) {
 
     for (int j = 0; j < fragment_size; j++) {
         int get = 0;
-        data_info_t *p = NULL;
-        for (int i = 0; i < collection->max_data_size; i++) {
-            p = collection->data_base + i * (sizeof(data_info_t));
-            if (p != NULL && p->c_use == 0x00) {
-                if (p_last != NULL) {
-                    p_last->next = get_data_offset(collection, p);
-                }
-
-                if (j == 0) {
-                    p_first = p;
-                }
-
-                get = 1;
-                p_last = p;
-                p_last->next = INIT_OFFSET;
-                p->c_use = USE;
-                break;
+        data_info_t *p = hd_node_alloc(collection);
+        if (p != NULL) {
+            if (p_last != NULL) {
+                p_last->next = get_data_offset(collection, p);
             }
+            if (j == 0) {
+                p_first = p;
+            }
+            get = 1;
+            p_last = p;
+            p_last->next = INIT_OFFSET;
+            p->c_use = USE;
         }
-
         if (!get) {
-            return NULL;
+            p_first = NULL;
+            break;
         }
     }
 
+    mom_concurrent_unlock(&collection->resource->concurrent);
+
     return p_first;
 }
+
 
 static void hd_free(COLLECTION collection, data_info_t *p) {
 
     ASSERT_ADDRESS(collection, NULL, void);
     ASSERT_ADDRESS(p, NULL, void);
+    ASSERT_BOOL(mom_concurrent_lock(&collection->resource->concurrent, FALSE) == SUCCESS, NULL, void);
 
     data_info_t *t = p;
     data_info_t *p_next = NULL;
     for (; t != NULL; t = p_next) {
         p_next = get_data_addr(collection, t->next);
-        memset(t, 0x00, sizeof(data_info_t));
+        hd_node_free(collection, t);
     }
-
     if (p_next != NULL) {
-        memset(p_next, 0x00, sizeof(data_info_t));
+        hd_node_free(collection, p_next);
     }
+    mom_concurrent_unlock(&collection->resource->concurrent);
 }
 
 
@@ -165,7 +223,7 @@ write_data(COLLECTION collection, OFFSET data_offset, DATA shared_data, size_t s
 
         cpy_tot_sz += p_data->sz;
         if (offset == 0) {
-            memcpy(p_data->data + shared_data_size, shared_data->data + offset, p_data->sz);
+            memcpy(p_data->data + shared_data_size, shared_data->data, p_data->sz);
         } else {
             memcpy(p_data->data, shared_data->data + offset, p_data->sz);
         }
@@ -197,7 +255,6 @@ read_data(COLLECTION collection, OFFSET data_offset, DATA shared_data, size_t sh
 
     real_size = shared_data_size + tmp->size;
 
-    shared_data->data = malloc(tmp->size);
 
     for (; p_data != NULL; p_data = get_data_addr(collection, p_data->next)) {
 

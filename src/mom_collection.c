@@ -14,7 +14,7 @@
 #define CHUNK_SIZE 4096
 #endif
 
-COLLECTION mom_create_collection(RESOURCE resource, long max_size, long header_size) {
+COLLECTION mom_create_collection(RESOURCE resource, size_t max_size, size_t header_size) {
 
     COLLECTION this = (COLLECTION) malloc(sizeof(COLLECTION_T));
 
@@ -29,7 +29,7 @@ COLLECTION mom_create_collection(RESOURCE resource, long max_size, long header_s
     this->index_base = this->header_base + header_size;
     this->data_base = this->index_base
                       + this->max_size * sizeof(index_info_t);
-    this->max_data_size = resource->capacity / CHUNK_SIZE;
+    this->max_data_size = (resource->capacity - (this->max_size * sizeof(index_info_t))) / CHUNK_SIZE;
 
     return this;
 

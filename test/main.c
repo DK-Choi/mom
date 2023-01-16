@@ -16,17 +16,22 @@
 
 int main() {
 
-    time_t tm,tm2;
+    time_t tm, tm2;
 
 
     //RESOURCE_T* p_res = create_resource_shm("b",1000000L);
-    RESOURCE resource = mom_create_resource_shm("c", MAX_CAPACITY);
-
-//    mom_destroy_resource(resource);
+    RESOURCE resource_q1 = mom_create_resource_shm("c", MAX_CAPACITY);
+    RESOURCE resource_q2 = mom_create_resource_file("e",  "./list_2", MAX_CAPACITY);
+//    mom_destroy_resource(resource_q1);
+//    mom_destroy_resource(resource_q2);
 //    exit(1);
 
     //RESOURCE resource = mom_create_resource_file("c", "./list_", 1000000L);
-    if (resource == NULL) {
+    if (resource_q1 == NULL) {
+        printf("resource is null");
+        return FAIL;
+    }
+    if (resource_q2 == NULL) {
         printf("resource is null");
         return FAIL;
     }
@@ -34,8 +39,12 @@ int main() {
     /*RESOURCE_T* p_res = create_resource_local(1000000L);*/
     RESULT_DETAIL_T result_detail;
 
+    QUEUE queues[2];
 
-    QUEUE queue = mom_create_shared_queue(resource, 1000000, FALSE, &result_detail);
+    queues[0] = mom_create_shared_queue(resource_q1, 1000000, FALSE, &result_detail);
+    queues[1] = mom_create_shared_queue(resource_q2, 1000000, FALSE, &result_detail);
+
+
 
     fflush(stdout);
     char t[10];
@@ -44,15 +53,16 @@ int main() {
 
     char key[100];
     time(&tm);
-    for (int i = 0; i < 100000; i++) {
+    for (int i = 0; i < 200000; i++) {
         sprintf(key, "%d", i);
-        if (mom_add_shared_queue(queue, key, strlen(key), &result_detail) < 0) {
+        if (mom_add_shared_queue(queues[mom_get_hash_idx(key,2)], key, strlen(key), &result_detail) < 0) {
             printf("error1 %s\n", result_detail.message);
         }
     }
     time(&tm2);
-    int m = mom_size_shared_queue(queue, &result_detail);
-    printf("ADD QUEUE %d %d\n",  (tm2 - tm), m);
+    int m = mom_size_shared_queue(queues[0], &result_detail);
+    int m2 = mom_size_shared_queue(queues[1], &result_detail);
+    printf("ADD QUEUE %d %d\n", (tm2 - tm), m,m2);
 //    int m = mom_size_shared_queue(queue, &result_detail);
 //    {
 //        DATA data = mom_get_shared_queue(queue, 0, &result_detail);
@@ -70,27 +80,29 @@ int main() {
 
     //DATA data = NULL;
     time(&tm);
-    for(;;) {
-        DATA data = mom_poll_shared_queue(queue, 1000000, &result_detail);
-        if(data != NULL) {
-            printf("DATA %s\n",data->data);
-            mom_destroy_shared_data(data,&result_detail);
+    int cnt = 0;
+    for (;;) {
+        DATA data = mom_poll_shared_queue(queues[0], 10000, &result_detail);
+        if (data != NULL) {
+            mom_destroy_shared_data(data, &result_detail);
             //sleep(1);
+            cnt++;
         } else {
             printf("poll end [%s][%s][%d]\n", result_detail.message, result_detail.fn, result_detail.line);
             break;
         }
     }
     time(&tm2);
-    m = mom_size_shared_queue(queue, &result_detail);
-    printf("POLL QUEUE %d(%d) \n",  (tm2 - tm),m);
+    m = mom_size_shared_queue(queues[0], &result_detail);
+    printf("POLL QUEUE %d(%d)(%d) \n", (tm2 - tm), m, cnt);
 //    while ((data = mom_poll_shared_queue(queue, 10000, &result_detail)) != NULL) {
 //        printf("poll data %d %s\n", result_detail.fail, (STRING) data->data);
 //        mom_destroy_shared_data(data,&result_detail);
 //    }
 
 
-sleep(10);
+
+//sleep(10);
 
 
 
@@ -98,8 +110,8 @@ sleep(10);
 
     RESOURCE resource2 = mom_create_resource_shm("d", MAX_CAPACITY);
 
-    mom_destroy_resource(resource2);
-    exit(1);
+//    mom_destroy_resource(resource2);
+//    exit(1);
 
     MAP map = mom_create_shared_map(resource2, 2000000, TRUE, &result_detail);
     if (map == NULL) {
@@ -166,7 +178,7 @@ sleep(10);
     //}
 
     time(&tm2);
-    printf("%d %d \n", (60000 * 100), (tm2 - tm));
+    printf("%d \n", (tm2 - tm));
 
     printf("===OK\n");
 

@@ -49,6 +49,8 @@ RESULT mom_concurrent_broadcast(CONCURRENT concurrent);
 
 RESULT mom_concurrent_destroy(CONCURRENT concurrent);
 
+int mom_get_hash_idx(STRING key, int mod);
+
 #ifdef  __cplusplus
 extern }
 #endif

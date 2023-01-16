@@ -12,22 +12,7 @@
 MAP_DATA_T empty_map = {0, NULL, {0x00}};
 
 static QUEUE_HEADER __get_bucket__(MAP this, STRING key) {
-
-    unsigned long hash = 5381;
-
-//    while (*key != '\0') {
-//        hash = ((hash << 5) + (int) (*key)) ;//% BUCKET_SIZE;
-//        key++;
-//    }
-
-    for (; *key; ++key) {
-        hash ^= *key;
-        hash *= 0x5bd1e995;
-        hash ^= hash >> 15;
-    }
-
-    return &this->header->bucket[(int) (hash % BUCKET_SIZE)];
-
+    return &this->header->bucket[mom_get_hash_idx(key,BUCKET_SIZE)];
 }
 
 static void __init_bucket__(QUEUE_HEADER bucket) {

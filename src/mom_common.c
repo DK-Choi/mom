@@ -297,3 +297,17 @@ RESULT mom_concurrent_destroy(CONCURRENT concurrent) {
     return SUCCESS;
 
 }
+
+
+int mom_get_hash_idx(STRING key, int mod) {
+
+    unsigned long hash = 5381;
+
+    for (; *key; ++key) {
+        hash ^= *key;
+        hash *= 0x5bd1e995;
+        hash ^= hash >> 15;
+    }
+
+    return hash % mod;
+}

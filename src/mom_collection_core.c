@@ -61,7 +61,7 @@ static index_info_t *hi_node_alloc(COLLECTION collection) {
     *collection->p_index_pos = *collection->p_index_pos - 1;
     if (*collection->p_index_pos < 0) {
         *collection->p_index_pos = 0;
-        for (int i = collection->p_index_cache[0] + 1;
+        for (int i = 0;
              i < collection->max_size && *collection->p_index_pos < ALLOC_CACHE_SIZE; i++) {
             index_info_t *p = collection->index_base + i * (sizeof(index_info_t));
             if (p != NULL && p->c_use != USE) {
@@ -87,6 +87,9 @@ static void hi_node_free(COLLECTION collection, index_info_t *p) {
     memset(p, 0x00, sizeof(index_info_t));
     p->c_use = NOT_USE;
     p->next = INIT_OFFSET;
+    if (*collection->p_index_pos >= ALLOC_CACHE_SIZE) {
+        return;
+    }
     collection->p_index_cache[*collection->p_index_pos] = get_index_offset(collection, p) / sizeof(index_info_t);
     *collection->p_index_pos = *collection->p_index_pos + 1;
 }
@@ -111,7 +114,7 @@ static data_info_t *hd_node_alloc(COLLECTION collection) {
     *collection->p_data_pos = *collection->p_data_pos - 1;
     if (*collection->p_data_pos < 0) {
         *collection->p_data_pos = 0;
-        for (int i = collection->p_data_cache[0] + 1;
+        for (int i = 0;
              i < collection->max_data_size && *collection->p_data_pos < ALLOC_CACHE_SIZE; i++) {
             data_info_t *p = collection->data_base + i * (sizeof(data_info_t));
             if (p != NULL && p->c_use != USE) {
@@ -131,6 +134,9 @@ static void hd_node_free(COLLECTION collection, data_info_t *p) {
     memset(p, 0x00, sizeof(data_info_t));
     p->c_use = NOT_USE;
     p->next = INIT_OFFSET;
+    if (*collection->p_data_pos >= ALLOC_CACHE_SIZE) {
+        return;
+    }
     collection->p_data_cache[*collection->p_data_pos] = get_data_offset(collection, p) / sizeof(data_info_t);
     *collection->p_data_pos = *collection->p_data_pos + 1;
 }
@@ -211,7 +217,7 @@ write_data(COLLECTION collection, OFFSET data_offset, DATA shared_data, size_t s
     data_info_t *p_data = get_data_addr(collection, data_offset);
     OFFSET offset = 0;
     size_t cpy_tot_sz = 0;
-    OFFSET real_size = shared_data->size + shared_data_size;
+    OFFSET real_size = shared_data->size;
 
     memcpy(p_data->data, shared_data, shared_data_size);
 
@@ -236,7 +242,7 @@ write_data(COLLECTION collection, OFFSET data_offset, DATA shared_data, size_t s
 }
 
 static size_t
-read_data(COLLECTION collection, OFFSET data_offset, DATA shared_data, size_t shared_data_size) {
+read_data(COLLECTION collection, OFFSET data_offset, DATA shared_data, BOOL is_map, size_t shared_data_size) {
 
     ASSERT_ADDRESS(collection, SZ_ERR, size_t);
     ASSERT_ADDRESS(shared_data, SZ_ERR, size_t);
@@ -250,11 +256,12 @@ read_data(COLLECTION collection, OFFSET data_offset, DATA shared_data, size_t sh
     data_info_t *p_data = get_data_addr(collection, data_offset);
 
     DATA tmp = (DATA) (p_data->data);
+    shared_data->size = tmp->size;
+    if (is_map) {
+        strncmp(((MAP_DATA) shared_data)->key, ((MAP_DATA) (p_data->data))->key, MAX_NAME_SZ);
+    }
 
-    memcpy(shared_data, tmp, shared_data_size);
-
-    real_size = shared_data_size + tmp->size;
-
+    real_size = tmp->size;
 
     for (; p_data != NULL; p_data = get_data_addr(collection, p_data->next)) {
 
@@ -268,7 +275,7 @@ read_data(COLLECTION collection, OFFSET data_offset, DATA shared_data, size_t sh
 
         if (cp_sz > 0) {
             if (offset == 0) {
-                memcpy(shared_data->data + offset, p_data->data + shared_data_size, cp_sz);
+                memcpy(shared_data->data, p_data->data + shared_data_size, cp_sz);
             } else {
                 memcpy(shared_data->data + offset, p_data->data, cp_sz);
             }

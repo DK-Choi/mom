@@ -86,6 +86,7 @@ RESULT mom_concurrent_reinit(CONCURRENT concurrent, int flag) {
 
 RESULT mom_concurrent_lock(CONCURRENT concurrent, BOOL trymod) {
 
+    PRINT_DEBUG("CONCURRENT POINT=%x", concurrent);
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
 
     int rc;
@@ -118,6 +119,8 @@ RESULT mom_concurrent_lock(CONCURRENT concurrent, BOOL trymod) {
 }
 
 RESULT mom_concurrent_rdlock(CONCURRENT concurrent, BOOL trymod) {
+
+    PRINT_DEBUG("CONCURRENT POINT=%x", concurrent);
 
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
 
@@ -153,6 +156,7 @@ RESULT mom_concurrent_rdlock(CONCURRENT concurrent, BOOL trymod) {
 
 RESULT mom_concurrent_rwlock(CONCURRENT concurrent, BOOL trymod) {
 
+    PRINT_DEBUG("CONCURRENT POINT=%x", concurrent);
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
 
     int rc;
@@ -242,6 +246,7 @@ RESULT mom_concurrent_wait(CONCURRENT concurrent, BOOL include_lock, TIMESTAMP t
 
 RESULT mom_concurrent_unlock(CONCURRENT concurrent) {
 
+    PRINT_DEBUG("CONCURRENT POINT=%x", concurrent);
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
     pthread_mutex_unlock(&concurrent->mutex);
     return SUCCESS;
@@ -251,7 +256,8 @@ RESULT mom_concurrent_unlock(CONCURRENT concurrent) {
 RESULT mom_concurrent_rwunlock(CONCURRENT concurrent) {
 
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
-    pthread_rwlock_unlock(&concurrent->rwlock);
+    int rc = pthread_rwlock_unlock(&concurrent->rwlock);
+    PRINT_DEBUG("CONCURRENT POINT=%x %d", concurrent, rc);
     return SUCCESS;
 
 }

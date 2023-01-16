@@ -37,7 +37,7 @@ ADDRESS mom_get_shared_data(DATA this, RESULT_DETAIL result) {
 
 DATA mom_create_shared_data(size_t size, BOOL is_map, RESULT_DETAIL result) {
 
-    DATA this;
+    DATA this = NULL;
 
     ASSERT_AND_SET_RESULT(ASSERT_SIZE_COND(size), NULL, ADDRESS,
                           result, FAIL_INVALID_SIZE, "check size (%zu)", size);

@@ -25,7 +25,7 @@ enum CONCURRENT_TYPE {
 #define ORDER_ASC  1
 #define ORDER_DSC  -1
 #define MAX_NAME_SZ 255
-#define ALLOC_CACHE_SIZE 128
+#define ALLOC_CACHE_SIZE 256
 
 typedef char *STRING;
 typedef void *HANDLE;
@@ -53,5 +53,15 @@ typedef int ORDER_TP;
 
 #define SZ_ERR -1
 #define INIT_OFFSET -1L
+
+#ifdef DEBUG
+#define PRINT_DEBUG(fmt,...) { \
+char tmp_fmt[256];             \
+sprintf(tmp_fmt, "[%s][%s][%zu]%s\n",__FILE__, __FUNCTION__, __LINE__,fmt);                               \
+printf(tmp_fmt,__VA_ARGS__); \
+}
+#else
+#define PRINT_DEBUG(fmt,...)
+#endif
 
 #endif //__MOM_TYPES_H__

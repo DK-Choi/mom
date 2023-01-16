@@ -56,7 +56,9 @@ index_info_t *__remove_shared_map__(MAP this, STRING key, QUEUE_HEADER bucket, R
         }
         if (p_index_info != NULL) {
             data_info_t *p_data = get_data_addr(this->collection, p_index_info->data);
-            hd_free(this->collection, p_data);
+            if (p_data != NULL) {
+                hd_free(this->collection, p_data);
+            }
         }
         return p_index_info;
     }
@@ -107,13 +109,16 @@ MAP_DATA mom_remove_shared_map(MAP this, STRING key, RESULT_DETAIL result) {
             return &empty_map;
         }
         data_info_t *p_data = get_data_addr(this->collection, p_index_info->data);
-        MAP_DATA shared_data = (MAP_DATA) mom_create_shared_data(((MAP_DATA_T *) p_data->data)->size, TRUE, result);
-        if (shared_data != NULL) {
-            read_data(this->collection, p_index_info->data, (DATA) shared_data, sizeof(MAP_DATA_T));
+        MAP_DATA data = NULL;
+        if (p_data != NULL) {
+            data = (MAP_DATA) mom_create_shared_data(((MAP_DATA_T *) p_data->data)->size, TRUE, result);
+            if (data != NULL) {
+                read_data(this->collection, p_index_info->data, (DATA) data, TRUE, sizeof(MAP_DATA_T));
+            }
             hd_free(this->collection, p_data);
         }
         hi_free(this->collection, p_index_info);
-        return &empty_map;
+        return data;
     }
 
     return &empty_map;
@@ -129,10 +134,6 @@ RESULT mom_put_shared_map(MAP this, STRING key, ADDRESS data, size_t size, RESUL
     ASSERT_AND_SET_RESULT(ASSERT_SIZE_COND(size), FAIL_INVALID_SIZE, RESULT, result, FAIL_INVALID_SIZE,
                           "map data size is invalid(%zu)",
                           size);
-
-
-//    MAP_DATA map_data = mom_remove_shared_map(this, key, result);
-//    ASSERT_ADDRESS(map_data, SZ_ERR, long);
 
     QUEUE_HEADER bucket = __get_bucket__(this, key);
     ASSERT_AND_SET_RESULT (mom_concurrent_rwlock(&bucket->concurrent, FALSE) == SUCCESS, FAIL_LOCK, RESULT,
@@ -165,12 +166,12 @@ RESULT mom_put_shared_map(MAP this, STRING key, ADDRESS data, size_t size, RESUL
                 bucket->cnt++;
             }
             mom_concurrent_rwunlock(&bucket->concurrent);
-            MAP_DATA shared_data
+            MAP_DATA data
                     = (MAP_DATA) mom_create_and_set_shared_data(data, size, TRUE, result);
-            if (shared_data != NULL) {
-                strncpy(shared_data->key, key, MAX_NAME_SZ);
-                write_data(this->collection, p_index_info->data, (DATA) shared_data, sizeof(MAP_DATA_T));
-                mom_destroy_shared_data((DATA) shared_data, result);
+            if (data != NULL) {
+                strncpy(data->key, key, MAX_NAME_SZ);
+                write_data(this->collection, p_index_info->data, (DATA) data, sizeof(MAP_DATA_T));
+                mom_destroy_shared_data((DATA) data, result);
                 return SUCCESS;
             } else {
                 return result != NULL ? result->code : FAIL_NULL;
@@ -212,18 +213,19 @@ MAP_DATA mom_get_shared_map(MAP this, STRING key, RESULT_DETAIL result) {
         }
 
         mom_concurrent_rwunlock(&bucket->concurrent);
-
         if (p_index_info == NULL) {
             return &empty_map;
         }
 
         data_info_t *p_data = get_data_addr(this->collection, p_index_info->data);
-
-        MAP_DATA shared_data = (MAP_DATA) mom_create_shared_data(((MAP_DATA_T *) p_data->data)->size, TRUE, result);
-        if (shared_data != NULL) {
-            read_data(this->collection, p_index_info->data, (DATA) shared_data, sizeof(MAP_DATA_T));
+        MAP_DATA data = NULL;
+        if (p_data != NULL) {
+            data = (MAP_DATA) mom_create_shared_data(((MAP_DATA_T *) p_data->data)->size, TRUE, result);
+            if (data != NULL) {
+                read_data(this->collection, p_index_info->data, (DATA) data, TRUE, sizeof(MAP_DATA_T));
+            }
         }
-        return shared_data;
+        return data;
     }
 
     return &empty_map;
@@ -356,7 +358,7 @@ MAP mom_create_shared_map(RESOURCE resource, size_t max_size, BOOL recreate_mode
                                                 &resource->concurrent),
                                         NULL, ADDRESS,
                                         result, FAIL_INVALID_SIZE,
-                                        "map size is different org_size=[%zu] curr_size=[%zu]",
+                                        "map max size is different org_size=[%zu] curr_size=[%zu]",
                                         this->header->max_size, max_size);
 
     mom_concurrent_unlock(&resource->concurrent);

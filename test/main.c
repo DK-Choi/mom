@@ -6,6 +6,7 @@
  *     *      Author: 76050
  *      */
 
+#include <unistd.h>
 #include "mom_resource.h"
 #include "mom_shared_queue.h"
 #include "mom_result.h"
@@ -15,8 +16,11 @@
 
 int main() {
 
+    time_t tm,tm2;
+
+
     //RESOURCE_T* p_res = create_resource_shm("b",1000000L);
-    RESOURCE resource = mom_create_resource_shm("c", 1000000L);
+    RESOURCE resource = mom_create_resource_shm("c", MAX_CAPACITY);
 
 //    mom_destroy_resource(resource);
 //    exit(1);
@@ -30,39 +34,72 @@ int main() {
     /*RESOURCE_T* p_res = create_resource_local(1000000L);*/
     RESULT_DETAIL_T result_detail;
 
-/*
-    QUEUE queue = mom_create_shared_queue(resource, 5, &result_detail);
+
+    QUEUE queue = mom_create_shared_queue(resource, 1000000, FALSE, &result_detail);
 
     fflush(stdout);
     char t[10];
     printf("111\n");
     fflush(stdout);
 
-
-    for(int i=0;i<10000;i++) {
-        if (mom_add_shared_queue(queue, "bbb1", 4, &result_detail) < 0) {
+    char key[100];
+    time(&tm);
+    for (int i = 0; i < 100000; i++) {
+        sprintf(key, "%d", i);
+        if (mom_add_shared_queue(queue, key, strlen(key), &result_detail) < 0) {
             printf("error1 %s\n", result_detail.message);
         }
     }
-
+    time(&tm2);
     int m = mom_size_shared_queue(queue, &result_detail);
-    {
-        DATA data = mom_get_shared_queue(queue, 0, &result_detail);
-        if (data != NULL) {
-            printf("get data %s %d\n", (STRING)data->data, m);
+    printf("ADD QUEUE %d %d\n",  (tm2 - tm), m);
+//    int m = mom_size_shared_queue(queue, &result_detail);
+//    {
+//        DATA data = mom_get_shared_queue(queue, 0, &result_detail);
+//        if (data != NULL) {
+//            printf("get data %s %d\n", (STRING) data->data, m);
+//        }
+//    }
+//
+//    for (int i = 0; i < 10000; i++) {
+//        DATA data = mom_get_shared_queue(queue, i, &result_detail);
+//        if (data != NULL) {
+//            printf("get data %s %d\n", (STRING) data->data, m);
+//        }
+//    }
+
+    //DATA data = NULL;
+    time(&tm);
+    for(;;) {
+        DATA data = mom_poll_shared_queue(queue, 1000000, &result_detail);
+        if(data != NULL) {
+            printf("DATA %s\n",data->data);
+            mom_destroy_shared_data(data,&result_detail);
+            //sleep(1);
+        } else {
+            printf("poll end [%s][%s][%d]\n", result_detail.message, result_detail.fn, result_detail.line);
+            break;
         }
     }
+    time(&tm2);
+    m = mom_size_shared_queue(queue, &result_detail);
+    printf("POLL QUEUE %d(%d) \n",  (tm2 - tm),m);
+//    while ((data = mom_poll_shared_queue(queue, 10000, &result_detail)) != NULL) {
+//        printf("poll data %d %s\n", result_detail.fail, (STRING) data->data);
+//        mom_destroy_shared_data(data,&result_detail);
+//    }
 
-    DATA data = NULL;
-    while ((data = mom_poll_shared_queue(queue, 10000, &result_detail)) != NULL) {
-        printf("poll data %d %s\n", result_detail.fail, (STRING)data->data);
-    }
-     */
+
+sleep(10);
+
+
+
+    memset(&result_detail, 0x00, sizeof(RESULT_DETAIL_T));
 
     RESOURCE resource2 = mom_create_resource_shm("d", MAX_CAPACITY);
 
-//    mom_destroy_resource(resource2);
-//    exit(1);
+    mom_destroy_resource(resource2);
+    exit(1);
 
     MAP map = mom_create_shared_map(resource2, 2000000, TRUE, &result_detail);
     if (map == NULL) {
@@ -74,38 +111,33 @@ int main() {
 //    }
 
 
-    char* x = "aklsjfklsjdflasjdlksjdflsajflsjflksjlfksjdflksjflksjdsldfkjsalkfjaslkdjflasdkjfalskfjslakfjlsjflksjdflkasjdflsjdflkjsdfljsflksjlfkjasdflkajsdflsjlfkjsdklfjsdlfkjslfkjslfdjsldkfjslkfjsldkjfsldkfjsldfj";
+    char *x = "aklsjfklsjdflasjdlksjdflsajflsjflksjlfksjdflksjflksjdsldfkjsalkfjaslkdjflasdkjfalskfjslakfjlsjflksjdflkasjdflsjdflkjsdfljsflksjlfkjasdflkajsdflsjlfkjsdklfjsdlfkjslfkjslfdjsldkfjslkfjsldkjfsldkfjsldfj";
 
     printf("error2 %s\n", result_detail.message);
 
-    time_t tm;
     time(&tm);
 
-    time_t tm2;
-
-    char key[100];
-
     //for(int j=0;j<1000;j++) {
-        for (int i = 0; i < 200000; i++) {
+    for (int i = 0; i < 200000; i++) {
 
-            sprintf(key, "%d", i);
-            mom_put_shared_map(map, key, x, strlen(x), &result_detail);
+        sprintf(key, "%d", i);
+        mom_put_shared_map(map, key, x, strlen(x), &result_detail);
 
-            //if(result_detail.code != SUCCESS) {
-            //    printf("%s %s\n", key, result_detail.message);
-            //}
+        //if(result_detail.code != SUCCESS) {
+        //    printf("%s %s\n", key, result_detail.message);
+        //}
 
 //        MAP_DATA map_data = mom_get_shared_map(map, "test", &result_detail);
 //        if (map_data != NULL) {
 //            printf("%s %zu", (STRING) map_data->data, map_data->size);
 //        }
-        }
+    }
     //}
 
 
     time(&tm2);
 
-    printf("%d \n" , (tm2 - tm));
+    printf("%d \n", (tm2 - tm));
 
 
     time(&tm);
@@ -113,10 +145,10 @@ int main() {
 
     //for(int j=0;j<100;j++) {
 
-        for (int i = 0; i < 200000; i++) {
+    for (int i = 0; i < 200000; i++) {
 
-            sprintf(key, "%d", i);
-            MAP_DATA map_data = mom_get_shared_map(map, key, &result_detail);
+        sprintf(key, "%d", i);
+        MAP_DATA map_data = mom_get_shared_map(map, key, &result_detail);
 
 //            if (map_data != NULL) {
 //                printf("%s %zu\n", (STRING) map_data->data, map_data->size);
@@ -128,19 +160,19 @@ int main() {
 //        if (map_data != NULL) {
 //            printf("%s %zu", (STRING) map_data->data, map_data->size);
 //        }
-        }
+    }
 
 
     //}
 
     time(&tm2);
-    printf("%d %d \n", (60000*100), (tm2 - tm));
+    printf("%d %d \n", (60000 * 100), (tm2 - tm));
 
     printf("===OK\n");
 
-    printf("%d\n", mom_size_shared_map(map,&result_detail));
+    printf("%d\n", mom_size_shared_map(map, &result_detail));
 
-    mom_destroy_shared_map(map,&result_detail);
+    mom_destroy_shared_map(map, &result_detail);
 
     //mom_destroy_resource(resource2);
 

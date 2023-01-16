@@ -23,24 +23,24 @@ long mom_add_shared_queue(QUEUE this, ADDRESS data, size_t size, RESULT_DETAIL r
     index_info_t *p_index_info = hi_alloc(this->collection);
 
     if (p_index_info != NULL) {
-
         data_info_t *p_data_info = hd_alloc(this->collection, sizeof(DATA_T) + size);
-
         if (p_data_info != NULL) {
-
             p_index_info->data = get_data_offset(this->collection, p_data_info);
 
+            OFFSET curr_offset = get_index_offset(this->collection, p_index_info);
             if (this->header->last >= 0) {
                 index_info_t *p_index_info_last
                         = get_index_addr(this->collection, this->header->last);
-                p_index_info_last->next = get_index_offset(this->collection, p_index_info);
+                if (p_index_info_last != NULL) {
+                    p_index_info_last->next = get_index_offset(this->collection, p_index_info);
+                }
             }
 
+            this->header->last = curr_offset;
             if (this->header->start < 0) {
-                this->header->start = get_index_offset(this->collection, p_index_info);
+                this->header->start = this->header->last;
             }
 
-            this->header->last = get_index_offset(this->collection, p_index_info);
             this->header->cnt++;
 
             mom_concurrent_rwunlock(&this->header->concurrent);
@@ -49,6 +49,7 @@ long mom_add_shared_queue(QUEUE this, ADDRESS data, size_t size, RESULT_DETAIL r
             if (shared_data != NULL) {
                 write_data(this->collection, p_index_info->data, shared_data, sizeof(DATA_T));
                 mom_concurrent_broadcast(&this->header->concurrent);
+                mom_destroy_shared_data(shared_data, result);
                 return this->header->cnt;
             } else {
                 return SZ_ERR;
@@ -121,13 +122,15 @@ DATA mom_poll_shared_queue(QUEUE this, TIMESTAMP timeout, RESULT_DETAIL result) 
 
     if (this->header->start < 0) {
         mom_concurrent_wait(&this->header->concurrent, TRUE, timeout);
-    }
-
-    if (this->header->start >= 0) {
+    } else {
         ASSERT_AND_SET_RESULT (mom_concurrent_rwlock(&this->header->concurrent, FALSE) == SUCCESS, NULL, ADDRESS,
                                result, FAIL_LOCK, "queue is busy");
 
         index_info_t *p_index_info = get_index_addr(this->collection, this->header->start);
+        if (p_index_info == NULL) {
+            mom_concurrent_rwunlock(&this->header->concurrent);
+            return NULL;
+        }
         this->header->start = p_index_info->next;
         if (this->header->start < 0) {
             this->header->last = INIT_OFFSET;
@@ -137,17 +140,18 @@ DATA mom_poll_shared_queue(QUEUE this, TIMESTAMP timeout, RESULT_DETAIL result) 
 
         mom_concurrent_rwunlock(&this->header->concurrent);
 
-        data_info_t *p_temp = get_data_addr(this->collection, p_index_info->data);
-
-        DATA data = mom_create_shared_data(((DATA_T *) p_temp->data)->size, FALSE, result);
-        if (data != NULL) {
-            read_data(this->collection, p_index_info->data, data, sizeof(DATA_T));
-            hd_free(this->collection, p_temp);
-            hi_free(this->collection, p_index_info);
+        data_info_t *p_data = get_data_addr(this->collection, p_index_info->data);
+        DATA data = NULL;
+        if (p_data != NULL) {
+            data = mom_create_shared_data(((DATA_T *) p_data->data)->size, FALSE, result);
+            if (data != NULL) {
+                read_data(this->collection, p_index_info->data, data, FALSE, sizeof(DATA_T));
+            }
+            hd_free(this->collection, p_data);
         }
+        hi_free(this->collection, p_index_info);
         return data;
     }
-
     return NULL;
 
 }
@@ -176,11 +180,13 @@ DATA mom_get_shared_queue(QUEUE this, int idx, RESULT_DETAIL result) {
             return NULL;
         }
 
-        data_info_t *p_temp = get_data_addr(this->collection, p_index_info->data);
-
-        DATA data = mom_create_shared_data(((DATA) p_temp->data)->size, FALSE, result);
-        if (data != NULL) {
-            read_data(this->collection, p_index_info->data, data, sizeof(DATA_T));
+        DATA data = NULL;
+        data_info_t *p_data = get_data_addr(this->collection, p_index_info->data);
+        if (p_data != NULL) {
+            data = mom_create_shared_data(((DATA) p_data->data)->size, FALSE, result);
+            if (data != NULL) {
+                read_data(this->collection, p_index_info->data, data, FALSE, sizeof(DATA_T));
+            }
         }
         return data;
     }
@@ -228,20 +234,21 @@ DATA mom_remove_shared_queue(QUEUE this, int idx, RESULT_DETAIL result) {
         }
 
         mom_concurrent_rwunlock(&this->header->concurrent);
-
         if (p_index_info == NULL) {
             return NULL;
         }
 
-        data_info_t *p_temp = get_data_addr(this->collection, p_index_info->data);
-
-        DATA shared_data = mom_create_shared_data(((DATA_T *) p_temp->data)->size, FALSE, result);
-        if (shared_data != NULL) {
-            read_data(this->collection, p_index_info->data, shared_data, sizeof(DATA_T));
-            hd_free(this->collection, p_temp);
-            hi_free(this->collection, p_index_info);
+        data_info_t *p_data = get_data_addr(this->collection, p_index_info->data);
+        DATA data = NULL;
+        if(p_data != NULL) {
+            data = mom_create_shared_data(((DATA_T *) p_data->data)->size, FALSE, result);
+            if (data != NULL) {
+                read_data(this->collection, p_index_info->data, data, FALSE, sizeof(DATA_T));
+            }
+            hd_free(this->collection, p_data);
         }
-        return shared_data;
+        hi_free(this->collection, p_index_info);
+        return data;
 
     }
 
@@ -289,7 +296,7 @@ long mom_size_shared_queue(QUEUE this, RESULT_DETAIL result) {
 
 }
 
-QUEUE mom_create_shared_queue(RESOURCE resource, size_t max_size, RESULT_DETAIL result) {
+QUEUE mom_create_shared_queue(RESOURCE resource, size_t max_size, BOOL recreate_mode, RESULT_DETAIL result) {
 
     QUEUE this = NULL;
 
@@ -328,11 +335,12 @@ QUEUE mom_create_shared_queue(RESOURCE resource, size_t max_size, RESULT_DETAIL 
     this->collection->p_index_pos = &this->header->next_index_pos;
     this->collection->p_data_pos = &this->header->next_data_pos;
 
-    if (this->header->c_use != USE) {
+    if ((TRUE == recreate_mode && this->header->max_size != max_size) || this->header->c_use != USE) {
         this->header->c_use = USE;
         this->header->start = INIT_OFFSET;
         this->header->last = INIT_OFFSET;
         this->header->cnt = 0;
+        this->header->max_size = max_size;
         RESULT rc;
         ASSERT_IF_FAIL_CALL_AND_SET_RESULT ((rc = mom_concurrent_init(&this->header->concurrent, TRUE)) == SUCCESS,
                                             mom_destroy_shared_queue(this, result); mom_concurrent_unlock(
@@ -347,6 +355,14 @@ QUEUE mom_create_shared_queue(RESOURCE resource, size_t max_size, RESULT_DETAIL 
             this->header->next_data_pos = ALLOC_CACHE_SIZE;
         }
     }
+
+    ASSERT_IF_FAIL_CALL_AND_SET_RESULT (this->header->max_size == max_size,
+                                        mom_destroy_shared_queue(this, result); mom_concurrent_unlock(
+                                                &resource->concurrent),
+                                        NULL, ADDRESS,
+                                        result, FAIL_INVALID_SIZE,
+                                        "queue max size is different org_size=[%zu] curr_size=[%zu]",
+                                        this->header->max_size, max_size);
 
     mom_concurrent_unlock(&resource->concurrent);
 

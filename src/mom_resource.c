@@ -110,7 +110,7 @@ RESOURCE mom_create_resource_file(STRING name, STRING path, CAPACITY capacity) {
 
 }
 
-RESOURCE create_resource_local(STRING name, CAPACITY capacity) {
+RESOURCE mom_create_resource_local(STRING name, CAPACITY capacity) {
 
     ASSERT_NOT_EMPTY_STRING(name, NULL, ADDRESS);
     ASSERT_CAPACITY(capacity, NULL, ADDRESS);

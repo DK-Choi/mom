@@ -18,15 +18,15 @@
 
 #define ASSERT(cond, rtn, tp) if(!(cond)) return (tp)rtn
 
-#define ASSERT_ADDRESS_COND(value)          (value != NULL)
-#define ASSERT_CAPACITY_COND(value)         (value >= MIN_CAPACITY && value <= MAX_CAPACITY)
-#define ASSERT_SIZE_COND(value)             (value >= MIN_SIZE && value <= MAX_SIZE)
-#define ASSERT_NOT_EMPTY_STRING_COND(value) (value != NULL && strlen(value) > 0)
-#define ASSERT_INDEX_COND(value)            (value >= MIN_IDX && value <= MAX_IDX)
-#define ASSERT_OFFSET_COND(value)           (value >= 0)
-#define ASSERT_COLLECTION_TP_COND(value)    (value >= COLLECTION_TYPE_LIST && value <= COLLECTION_TYPE_POINTER)
-#define ASSERT_BOOL_COND(value)             (value == TRUE || value == FALSE)
-#define ASSERT_ORDER_COND(value)            (value == ORDER_ASC || value == ORDER_DSC)
+#define ASSERT_ADDRESS_COND(value)          ((value) != NULL)
+#define ASSERT_CAPACITY_COND(value)         ((value) >= MIN_CAPACITY && (value) <= MAX_CAPACITY)
+#define ASSERT_SIZE_COND(value)             ((value) >= MIN_SIZE && (value) <= MAX_SIZE)
+#define ASSERT_NOT_EMPTY_STRING_COND(value) ((value) != NULL && strlen(value) > 0)
+#define ASSERT_INDEX_COND(value)            ((value) >= MIN_IDX && (value) <= MAX_IDX)
+#define ASSERT_OFFSET_COND(value)           ((value) >= 0)
+#define ASSERT_COLLECTION_TP_COND(value)    ((value) >= COLLECTION_TYPE_LIST && (value) <= COLLECTION_TYPE_POINTER)
+#define ASSERT_BOOL_COND(value)             ((value) == TRUE)
+#define ASSERT_ORDER_COND(value)            ((value) == ORDER_ASC || (value) == ORDER_DSC)
 
 #define ASSERT_ADDRESS(value, rtn, tp)          if(!ASSERT_ADDRESS_COND(value)) return (tp)rtn
 #define ASSERT_CAPACITY(value, rtn, tp)         if(!ASSERT_CAPACITY_COND(value)) return (tp)rtn

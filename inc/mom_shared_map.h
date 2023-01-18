@@ -3,23 +3,26 @@
 
 #include "mom_common.h"
 #include "mom_collection.h"
-#include "mom_shared_queue.h"
+#include "mom_shared_data.h"
 
 #define BUCKET_SIZE 1024
-#define POS_CACHE_SIZE 128
+typedef struct {
+    char c_use;
+    OFFSET start;
+    OFFSET last;
+    long cnt;
+    CONCURRENT_T concurrent;
+} BUCKET_T;
 
 typedef struct {
     char c_use;
-    size_t max_size;
-    size_t next_index_cache[ALLOC_CACHE_SIZE];
-    size_t next_data_cache[ALLOC_CACHE_SIZE];
-    int next_index_pos;
-    int next_data_pos;
-    QUEUE_HEADER_T bucket[BUCKET_SIZE];
+    BUCKET_T bucket[BUCKET_SIZE];
+    RESOURCE_CACHE_T resource_cache;
     CONCURRENT_T concurrent;
 } MAP_HEADER_T;
 
-typedef MAP_HEADER_T* MAP_HEADER;
+typedef BUCKET_T *BUCKET;
+typedef MAP_HEADER_T *MAP_HEADER;
 
 typedef struct {
     MAP_HEADER header;
@@ -27,7 +30,7 @@ typedef struct {
 } MAP_T;
 
 
-typedef MAP_T* MAP;
+typedef MAP_T *MAP;
 
 #ifdef  __cplusplus
 extern "C" {

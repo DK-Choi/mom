@@ -10,11 +10,7 @@ typedef struct {
     OFFSET start;
     OFFSET last;
     long cnt;
-    size_t max_size;
-    size_t next_index_cache[ALLOC_CACHE_SIZE];
-    size_t next_data_cache[ALLOC_CACHE_SIZE];
-    int next_index_pos;
-    int next_data_pos;
+    RESOURCE_CACHE_T resource_cache;
     CONCURRENT_T concurrent;
 } QUEUE_HEADER_T;
 
@@ -40,6 +36,8 @@ long mom_push_shared_queue(QUEUE this, ADDRESS data, size_t size, RESULT_DETAIL 
 long mom_add_shared_queue(QUEUE this, ADDRESS data, size_t size, RESULT_DETAIL result_detail);
 
 DATA mom_poll_shared_queue(QUEUE this, TIMESTAMP timeout, RESULT_DETAIL result_detail);
+
+DATA mom_poll_nowait_shared_queue(QUEUE this, RESULT_DETAIL result_detail);
 
 DATA mom_get_shared_queue(QUEUE this, int idx, RESULT_DETAIL result_detail);
 

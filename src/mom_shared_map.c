@@ -11,11 +11,11 @@
 
 MAP_DATA_T empty_map = {0, NULL, {0x00}};
 
-static QUEUE_HEADER __get_bucket__(MAP this, STRING key) {
-    return &this->header->bucket[mom_get_hash_idx(key,BUCKET_SIZE)];
+static BUCKET __get_bucket__(MAP this, STRING key) {
+    return &this->header->bucket[mom_get_hash_idx(key, BUCKET_SIZE)];
 }
 
-static void __init_bucket__(QUEUE_HEADER bucket) {
+static void __init_bucket__(BUCKET bucket) {
 
     bucket->c_use = USE;
     bucket->start = INIT_OFFSET;
@@ -24,7 +24,7 @@ static void __init_bucket__(QUEUE_HEADER bucket) {
     mom_concurrent_init(&bucket->concurrent, TRUE);
 }
 
-index_info_t *__remove_shared_map__(MAP this, STRING key, QUEUE_HEADER bucket, RESULT_DETAIL result) {
+index_info_t *__remove_shared_map__(MAP this, STRING key, BUCKET bucket, RESULT_DETAIL result) {
 
     ASSERT_AND_SET_RESULT(ASSERT_ADDRESS_COND(this), NULL, ADDRESS, result, FAIL_UNDEF, "undefined map");
     ASSERT_AND_SET_RESULT(ASSERT_NOT_EMPTY_STRING_COND(key), NULL, ADDRESS, result, FAIL_UNDEF, "map key is empty");
@@ -56,7 +56,7 @@ MAP_DATA mom_remove_shared_map(MAP this, STRING key, RESULT_DETAIL result) {
     ASSERT_AND_SET_RESULT(ASSERT_ADDRESS_COND(this), NULL, ADDRESS, result, FAIL_UNDEF, "undefined map");
     ASSERT_AND_SET_RESULT(ASSERT_NOT_EMPTY_STRING_COND(key), NULL, ADDRESS, result, FAIL_UNDEF, "map key is empty");
 
-    QUEUE_HEADER bucket = __get_bucket__(this, key);
+    BUCKET bucket = __get_bucket__(this, key);
 
     if (bucket->cnt > 0) {
         ASSERT_AND_SET_RESULT(mom_concurrent_rwlock(&bucket->concurrent, FALSE) == SUCCESS, NULL, ADDRESS,
@@ -120,7 +120,7 @@ RESULT mom_put_shared_map(MAP this, STRING key, ADDRESS data, size_t size, RESUL
                           "map data size is invalid(%zu)",
                           size);
 
-    QUEUE_HEADER bucket = __get_bucket__(this, key);
+    BUCKET bucket = __get_bucket__(this, key);
     ASSERT_AND_SET_RESULT (mom_concurrent_rwlock(&bucket->concurrent, FALSE) == SUCCESS, FAIL_LOCK, RESULT,
                            result, FAIL_LOCK, "map is busy");
 
@@ -151,12 +151,12 @@ RESULT mom_put_shared_map(MAP this, STRING key, ADDRESS data, size_t size, RESUL
                 bucket->cnt++;
             }
             mom_concurrent_rwunlock(&bucket->concurrent);
-            MAP_DATA data
+            MAP_DATA shared_data
                     = (MAP_DATA) mom_create_and_set_shared_data(data, size, TRUE, result);
-            if (data != NULL) {
-                strncpy(data->key, key, MAX_NAME_SZ);
-                write_data(this->collection, p_index_info->data, (DATA) data, sizeof(MAP_DATA_T));
-                mom_destroy_shared_data((DATA) data, result);
+            if (shared_data != NULL) {
+                strncpy(shared_data->key, key, MAX_NAME_SZ);
+                write_data(this->collection, p_index_info->data, (DATA) shared_data, sizeof(MAP_DATA_T));
+                mom_destroy_shared_data((DATA) shared_data, result);
                 return SUCCESS;
             } else {
                 return result != NULL ? result->code : FAIL_NULL;
@@ -179,7 +179,7 @@ MAP_DATA mom_get_shared_map(MAP this, STRING key, RESULT_DETAIL result) {
     ASSERT_AND_SET_RESULT(ASSERT_ADDRESS_COND(this), NULL, ADDRESS, result, FAIL_UNDEF, "undefined map");
     ASSERT_AND_SET_RESULT(ASSERT_NOT_EMPTY_STRING_COND(key), NULL, ADDRESS, result, FAIL_UNDEF, "map key is empty");
 
-    QUEUE_HEADER bucket = __get_bucket__(this, key);
+    BUCKET bucket = __get_bucket__(this, key);
     if (bucket->cnt > 0) {
         ASSERT_AND_SET_RESULT (mom_concurrent_rdlock(&bucket->concurrent, FALSE) == SUCCESS, NULL, ADDRESS,
                                result, FAIL_LOCK, "map is busy");
@@ -217,7 +217,7 @@ MAP_DATA mom_get_shared_map(MAP this, STRING key, RESULT_DETAIL result) {
 
 }
 
-static RESULT __clear_list__(MAP this, QUEUE_HEADER bucket) {
+static RESULT __clear_list__(MAP this, BUCKET bucket) {
 
     if (mom_concurrent_rwlock(&bucket->concurrent, FALSE) != SUCCESS) {
         return FAIL_LOCK;
@@ -312,14 +312,14 @@ MAP mom_create_shared_map(RESOURCE resource, size_t max_size, BOOL recreate_mode
                                         result, FAIL_SYS, "map collection create fail");
 
     this->header = this->collection->header_base;
-    this->collection->p_index_cache = this->header->next_index_cache;
-    this->collection->p_data_cache = this->header->next_data_cache;
-    this->collection->p_index_pos = &this->header->next_index_pos;
-    this->collection->p_data_pos = &this->header->next_data_pos;
+    this->collection->p_index_cache = this->header->resource_cache.next_index_cache;
+    this->collection->p_data_cache = this->header->resource_cache.next_data_cache;
+    this->collection->p_index_pos = &this->header->resource_cache.next_index_pos;
+    this->collection->p_data_pos = &this->header->resource_cache.next_data_pos;
 
-    if ((TRUE == recreate_mode && this->header->max_size != max_size) || this->header->c_use != USE) {
+    if ((TRUE == recreate_mode && this->header->resource_cache.max_size != max_size) || this->header->c_use != USE) {
         this->header->c_use = USE;
-        this->header->max_size = max_size;
+        this->header->resource_cache.max_size = max_size;
         for (int i = 0; i < BUCKET_SIZE; i++) {
             __init_bucket__(&this->header->bucket[i]);
         }
@@ -331,20 +331,28 @@ MAP mom_create_shared_map(RESOURCE resource, size_t max_size, BOOL recreate_mode
                                             result, rc, "map concurrent init fail");
 
         for (int i = 0; i < ALLOC_CACHE_SIZE; i++) {
-            this->header->next_index_cache[i] = ALLOC_CACHE_SIZE - i - 1;
-            this->header->next_data_cache[i] = ALLOC_CACHE_SIZE - i - 1;
-            this->header->next_index_pos = ALLOC_CACHE_SIZE;
-            this->header->next_data_pos = ALLOC_CACHE_SIZE;
+            this->header->resource_cache.next_index_cache[i] = ALLOC_CACHE_SIZE - i - 1;
+            this->header->resource_cache.next_data_cache[i] = ALLOC_CACHE_SIZE - i - 1;
+            this->header->resource_cache.next_index_pos = ALLOC_CACHE_SIZE;
+            this->header->resource_cache.next_data_pos = ALLOC_CACHE_SIZE;
+        }
+    } else {
+        if (mom_get_alive_pid_count(this->header->resource_cache.pids) == 0) {
+            mom_concurrent_unlock(&this->header->concurrent);
+            mom_concurrent_rwunlock(&this->header->concurrent);
+            for (int i = 0; i < BUCKET_SIZE; i++) {
+                mom_concurrent_rwunlock(&this->header->bucket[i].concurrent);
+            }
         }
     }
 
-    ASSERT_IF_FAIL_CALL_AND_SET_RESULT (this->header->max_size == max_size,
+    ASSERT_IF_FAIL_CALL_AND_SET_RESULT (this->header->resource_cache.max_size == max_size,
                                         mom_destroy_shared_map(this, result); mom_concurrent_unlock(
                                                 &resource->concurrent),
                                         NULL, ADDRESS,
                                         result, FAIL_INVALID_SIZE,
                                         "map max size is different org_size=[%zu] curr_size=[%zu]",
-                                        this->header->max_size, max_size);
+                                        this->header->resource_cache.max_size, max_size);
 
     mom_concurrent_unlock(&resource->concurrent);
     return this;

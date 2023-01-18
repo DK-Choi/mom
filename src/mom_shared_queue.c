@@ -43,15 +43,15 @@ long mom_add_shared_queue(QUEUE this, ADDRESS data, size_t size, RESULT_DETAIL r
 
             this->header->cnt++;
 
-            mom_concurrent_rwunlock(&this->header->concurrent);
-
             DATA shared_data = mom_create_and_set_shared_data(data, size, FALSE, result);
             if (shared_data != NULL) {
                 write_data(this->collection, p_index_info->data, shared_data, sizeof(DATA_T));
+                mom_concurrent_rwunlock(&this->header->concurrent);
                 mom_concurrent_broadcast(&this->header->concurrent);
                 mom_destroy_shared_data(shared_data, result);
                 return this->header->cnt;
             } else {
+                mom_concurrent_rwunlock(&this->header->concurrent);
                 return SZ_ERR;
             }
         } else {
@@ -93,15 +93,15 @@ long mom_push_shared_queue(QUEUE this, ADDRESS data, size_t size, RESULT_DETAIL 
 
             this->header->start = get_index_offset(this->collection, p_index_info);
             this->header->cnt++;
-
-            mom_concurrent_rwunlock(&this->header->concurrent);
-
             DATA shared_data = mom_create_and_set_shared_data(data, size, FALSE, result);
             if (shared_data != NULL) {
                 write_data(this->collection, p_index_info->data, shared_data, sizeof(DATA_T));
+                mom_concurrent_rwunlock(&this->header->concurrent);
                 mom_concurrent_broadcast(&this->header->concurrent);
+                mom_destroy_shared_data(shared_data, result);
                 return this->header->cnt;
             } else {
+                mom_concurrent_rwunlock(&this->header->concurrent);
                 return SZ_ERR;
             }
         } else {
@@ -112,16 +112,22 @@ long mom_push_shared_queue(QUEUE this, ADDRESS data, size_t size, RESULT_DETAIL 
 
     mom_concurrent_rwunlock(&this->header->concurrent);
 
+    SET_RESULT(result, FAIL_OVER_MAXIMUM, "queue max size exceeded");
+
     return SZ_ERR;
 
 }
 
-DATA mom_poll_shared_queue(QUEUE this, TIMESTAMP timeout, RESULT_DETAIL result) {
+static DATA __mom_poll_shared_queue__(QUEUE this, TIMESTAMP timeout, BOOL nowait, RESULT_DETAIL result) {
 
     ASSERT_AND_SET_RESULT(ASSERT_ADDRESS_COND(this), NULL, ADDRESS, result, FAIL_UNDEF, "undefined queue");
 
-    if (this->header->start < 0) {
-        mom_concurrent_wait(&this->header->concurrent, TRUE, timeout);
+    if (this->header->cnt <= 0) {
+        if (nowait) {
+            return NULL;
+        }
+        ASSERT_BOOL(mom_concurrent_wait(&this->header->concurrent, TRUE, timeout) == SUCCESS, NULL, ADDRESS);
+        return __mom_poll_shared_queue__(this, timeout, nowait, result);
     } else {
         ASSERT_AND_SET_RESULT (mom_concurrent_rwlock(&this->header->concurrent, FALSE) == SUCCESS, NULL, ADDRESS,
                                result, FAIL_LOCK, "queue is busy");
@@ -152,10 +158,16 @@ DATA mom_poll_shared_queue(QUEUE this, TIMESTAMP timeout, RESULT_DETAIL result) 
         hi_free(this->collection, p_index_info);
         return data;
     }
-    return NULL;
-
+    ASSERT_AND_SET_RESULT(1 != 1, NULL, ADDRESS, result, FAIL_NODATA, "empty");
 }
 
+DATA mom_poll_shared_queue(QUEUE this, TIMESTAMP timeout, RESULT_DETAIL result) {
+    return __mom_poll_shared_queue__(this, timeout, FALSE, result);
+}
+
+DATA mom_poll_nowait_shared_queue(QUEUE this, RESULT_DETAIL result) {
+    return __mom_poll_shared_queue__(this, 0, TRUE, result);
+}
 
 DATA mom_get_shared_queue(QUEUE this, int idx, RESULT_DETAIL result) {
 
@@ -240,7 +252,7 @@ DATA mom_remove_shared_queue(QUEUE this, int idx, RESULT_DETAIL result) {
 
         data_info_t *p_data = get_data_addr(this->collection, p_index_info->data);
         DATA data = NULL;
-        if(p_data != NULL) {
+        if (p_data != NULL) {
             data = mom_create_shared_data(((DATA_T *) p_data->data)->size, FALSE, result);
             if (data != NULL) {
                 read_data(this->collection, p_index_info->data, data, FALSE, sizeof(DATA_T));
@@ -330,17 +342,17 @@ QUEUE mom_create_shared_queue(RESOURCE resource, size_t max_size, BOOL recreate_
                                         result, FAIL_SYS, "queue collection create fail");
 
     this->header = this->collection->header_base;
-    this->collection->p_index_cache = this->header->next_index_cache;
-    this->collection->p_data_cache = this->header->next_data_cache;
-    this->collection->p_index_pos = &this->header->next_index_pos;
-    this->collection->p_data_pos = &this->header->next_data_pos;
+    this->collection->p_index_cache = this->header->resource_cache.next_index_cache;
+    this->collection->p_data_cache = this->header->resource_cache.next_data_cache;
+    this->collection->p_index_pos = &this->header->resource_cache.next_index_pos;
+    this->collection->p_data_pos = &this->header->resource_cache.next_data_pos;
 
-    if ((TRUE == recreate_mode && this->header->max_size != max_size) || this->header->c_use != USE) {
+    if ((TRUE == recreate_mode && this->header->resource_cache.max_size != max_size) || this->header->c_use != USE) {
         this->header->c_use = USE;
         this->header->start = INIT_OFFSET;
         this->header->last = INIT_OFFSET;
         this->header->cnt = 0;
-        this->header->max_size = max_size;
+        this->header->resource_cache.max_size = max_size;
         RESULT rc;
         ASSERT_IF_FAIL_CALL_AND_SET_RESULT ((rc = mom_concurrent_init(&this->header->concurrent, TRUE)) == SUCCESS,
                                             mom_destroy_shared_queue(this, result); mom_concurrent_unlock(
@@ -349,20 +361,33 @@ QUEUE mom_create_shared_queue(RESOURCE resource, size_t max_size, BOOL recreate_
                                             result, rc, "map concurrent init fail");
 
         for (int i = 0; i < ALLOC_CACHE_SIZE; i++) {
-            this->header->next_index_cache[i] = ALLOC_CACHE_SIZE - i - 1;
-            this->header->next_data_cache[i] = ALLOC_CACHE_SIZE - i - 1;
-            this->header->next_index_pos = ALLOC_CACHE_SIZE;
-            this->header->next_data_pos = ALLOC_CACHE_SIZE;
+            this->header->resource_cache.next_index_cache[i] = ALLOC_CACHE_SIZE - i - 1;
+            this->header->resource_cache.next_data_cache[i] = ALLOC_CACHE_SIZE - i - 1;
+            this->header->resource_cache.next_index_pos = ALLOC_CACHE_SIZE;
+            this->header->resource_cache.next_data_pos = ALLOC_CACHE_SIZE;
+        }
+    } else {
+        if (mom_get_alive_pid_count(this->header->resource_cache.pids) == 0) {
+            mom_concurrent_unlock(&this->header->concurrent);
+            mom_concurrent_rwunlock(&this->header->concurrent);
         }
     }
 
-    ASSERT_IF_FAIL_CALL_AND_SET_RESULT (this->header->max_size == max_size,
+    ASSERT_IF_FAIL_CALL_AND_SET_RESULT(mom_set_alive_pid(this->header->resource_cache.pids) == SUCCESS,
+                                       mom_destroy_shared_queue(this, result); mom_concurrent_unlock(
+                                               &resource->concurrent),
+                                       NULL, ADDRESS,
+                                       result, FAIL_OVER_MAXIMUM,
+                                       "max process exceeded. max_count is [%zu]",
+                                       MAX_PID_SZ);
+
+    ASSERT_IF_FAIL_CALL_AND_SET_RESULT (this->header->resource_cache.max_size == max_size,
                                         mom_destroy_shared_queue(this, result); mom_concurrent_unlock(
                                                 &resource->concurrent),
                                         NULL, ADDRESS,
                                         result, FAIL_INVALID_SIZE,
                                         "queue max size is different org_size=[%zu] curr_size=[%zu]",
-                                        this->header->max_size, max_size);
+                                        this->header->resource_cache.max_size, max_size);
 
     mom_concurrent_unlock(&resource->concurrent);
 

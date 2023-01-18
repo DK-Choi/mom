@@ -61,15 +61,17 @@ static index_info_t *hi_node_alloc(COLLECTION collection) {
     *collection->p_index_pos = *collection->p_index_pos - 1;
     if (*collection->p_index_pos < 0) {
         *collection->p_index_pos = 0;
-        for (int i = 0;
+        BOOL has_resource = FALSE;
+        for (size_t i = 0;
              i < collection->max_size && *collection->p_index_pos < ALLOC_CACHE_SIZE; i++) {
             index_info_t *p = collection->index_base + i * (sizeof(index_info_t));
             if (p != NULL && p->c_use != USE) {
                 collection->p_index_cache[ALLOC_CACHE_SIZE - *collection->p_index_pos - 1] = i;
                 *collection->p_index_pos = *collection->p_index_pos + 1;
+                has_resource = TRUE;
             }
         }
-        return hi_node_alloc(collection);
+        return has_resource ? hi_node_alloc(collection) : NULL;
     }
     size_t idx = collection->p_index_cache[*collection->p_index_pos];
 
@@ -114,15 +116,17 @@ static data_info_t *hd_node_alloc(COLLECTION collection) {
     *collection->p_data_pos = *collection->p_data_pos - 1;
     if (*collection->p_data_pos < 0) {
         *collection->p_data_pos = 0;
-        for (int i = 0;
+        BOOL has_resource = FALSE;
+        for (size_t i = 0;
              i < collection->max_data_size && *collection->p_data_pos < ALLOC_CACHE_SIZE; i++) {
             data_info_t *p = collection->data_base + i * (sizeof(data_info_t));
             if (p != NULL && p->c_use != USE) {
                 collection->p_data_cache[ALLOC_CACHE_SIZE - *collection->p_data_pos - 1] = i;
                 *collection->p_data_pos = *collection->p_data_pos + 1;
+                has_resource = TRUE;
             }
         }
-        return hd_node_alloc(collection);
+        return has_resource ? hd_node_alloc(collection) : NULL;
     }
     size_t idx = collection->p_data_cache[*collection->p_data_pos];
 

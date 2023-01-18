@@ -10,13 +10,17 @@
 #include "mom_common.h"
 #include <sys/time.h>
 #include <unistd.h>
+#include <signal.h>
 
 #define RETRY_WAIT_TIME 10000L //0.01sec
+#define ONE_SEC_TO_NANO_SEC 1000000000L
+#define ONE_MILLI_SEC 1000
 /*############################################################################*/
 
 enum {
     NEED_TO_INIT = 1,
     NEED_TO_RETRY,
+    TIMED_OUT,
     INVALID
 };
 
@@ -27,6 +31,8 @@ static int __get_error_no__(int rc) {
             return NEED_TO_INIT;
         case EBUSY:
             return NEED_TO_RETRY;
+        case ETIMEDOUT:
+            return TIMED_OUT;
         default:
             return INVALID;
     }
@@ -86,7 +92,6 @@ RESULT mom_concurrent_reinit(CONCURRENT concurrent, int flag) {
 
 RESULT mom_concurrent_lock(CONCURRENT concurrent, BOOL trymod) {
 
-    PRINT_DEBUG("CONCURRENT POINT=%x", concurrent);
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
 
     int rc;
@@ -119,8 +124,6 @@ RESULT mom_concurrent_lock(CONCURRENT concurrent, BOOL trymod) {
 }
 
 RESULT mom_concurrent_rdlock(CONCURRENT concurrent, BOOL trymod) {
-
-    PRINT_DEBUG("CONCURRENT POINT=%x", concurrent);
 
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
 
@@ -156,7 +159,6 @@ RESULT mom_concurrent_rdlock(CONCURRENT concurrent, BOOL trymod) {
 
 RESULT mom_concurrent_rwlock(CONCURRENT concurrent, BOOL trymod) {
 
-    PRINT_DEBUG("CONCURRENT POINT=%x", concurrent);
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
 
     int rc;
@@ -206,20 +208,28 @@ RESULT mom_concurrent_wait(CONCURRENT concurrent, BOOL include_lock, TIMESTAMP t
             struct timespec ts;
 
             gettimeofday(&now, NULL);
-            ts.tv_sec = now.tv_sec;
-            ts.tv_nsec = (now.tv_usec + timeout) * 1000;
+
+            long nano_sec = (now.tv_usec + timeout * ONE_MILLI_SEC) * ONE_MILLI_SEC;
+            int fragment_sec = nano_sec / ONE_SEC_TO_NANO_SEC;
+            nano_sec = nano_sec % ONE_SEC_TO_NANO_SEC;
+
+            ts.tv_sec = now.tv_sec + fragment_sec;
+            ts.tv_nsec = nano_sec;
+
             rc = pthread_cond_timedwait(&concurrent->cond, &concurrent->mutex, &ts);
         } else {
             rc = pthread_cond_wait(&concurrent->cond, &concurrent->mutex);
         }
+
         if (rc != SUCCESS) {
+            int rc2;
             switch (__get_error_no__(rc)) {
                 case NEED_TO_INIT:
-                    if ((rc = mom_concurrent_reinit(concurrent, COND)) != SUCCESS) {
+                    if ((rc2 = mom_concurrent_reinit(concurrent, COND)) != SUCCESS) {
                         if (include_lock == TRUE) {
                             mom_concurrent_unlock(concurrent);
                         }
-                        return rc;
+                        return rc2;
                     }
                     break;
                 case NEED_TO_RETRY:
@@ -245,8 +255,6 @@ RESULT mom_concurrent_wait(CONCURRENT concurrent, BOOL include_lock, TIMESTAMP t
 }
 
 RESULT mom_concurrent_unlock(CONCURRENT concurrent) {
-
-    PRINT_DEBUG("CONCURRENT POINT=%x", concurrent);
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
     pthread_mutex_unlock(&concurrent->mutex);
     return SUCCESS;
@@ -256,8 +264,7 @@ RESULT mom_concurrent_unlock(CONCURRENT concurrent) {
 RESULT mom_concurrent_rwunlock(CONCURRENT concurrent) {
 
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
-    int rc = pthread_rwlock_unlock(&concurrent->rwlock);
-    PRINT_DEBUG("CONCURRENT POINT=%x %d", concurrent, rc);
+    pthread_rwlock_unlock(&concurrent->rwlock);
     return SUCCESS;
 
 }
@@ -265,9 +272,7 @@ RESULT mom_concurrent_rwunlock(CONCURRENT concurrent) {
 RESULT mom_concurrent_signal(CONCURRENT concurrent) {
 
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
-
     pthread_cond_signal(&concurrent->cond);
-
     return SUCCESS;
 
 }
@@ -275,9 +280,7 @@ RESULT mom_concurrent_signal(CONCURRENT concurrent) {
 RESULT mom_concurrent_broadcast(CONCURRENT concurrent) {
 
     ASSERT_ADDRESS(concurrent, FAIL_NULL, RESULT);
-
     pthread_cond_broadcast(&concurrent->cond);
-
     return SUCCESS;
 
 }
@@ -296,6 +299,32 @@ RESULT mom_concurrent_destroy(CONCURRENT concurrent) {
 
     return SUCCESS;
 
+}
+
+int mom_get_alive_pid_count(pid_t pids[]) {
+    int cnt = 0;
+    for (int i = 0; i < MAX_PID_SZ; i++) {
+        if (pids[i] > 0) {
+            if (kill(pids[i], 0) != 0) {
+                pids[i] = 0;
+            } else {
+                cnt++;
+            }
+        }
+    }
+    return cnt;
+}
+
+RESULT mom_set_alive_pid(pid_t pids[]){
+
+    for (int i = 0; i < MAX_PID_SZ; i++) {
+        if (pids[i] <= 0) {
+            pids[i] = getpid();
+            return SUCCESS;
+        }
+    }
+
+    return FAIL_OVER_MAXIMUM;
 }
 
 

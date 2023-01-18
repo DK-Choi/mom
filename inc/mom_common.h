@@ -51,6 +51,10 @@ RESULT mom_concurrent_destroy(CONCURRENT concurrent);
 
 int mom_get_hash_idx(STRING key, int mod);
 
+int mom_get_alive_pid_count(pid_t pids[]);
+
+RESULT mom_set_alive_pid(pid_t pids[]);
+
 #ifdef  __cplusplus
 extern }
 #endif

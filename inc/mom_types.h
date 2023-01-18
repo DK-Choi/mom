@@ -26,6 +26,7 @@ enum CONCURRENT_TYPE {
 #define ORDER_DSC  -1
 #define MAX_NAME_SZ 255
 #define ALLOC_CACHE_SIZE 256
+#define MAX_PID_SZ 16
 
 typedef char *STRING;
 typedef void *HANDLE;
@@ -36,6 +37,7 @@ typedef unsigned int BOOL;
 typedef unsigned long CAPACITY;
 typedef int COLLECTION_TP;
 typedef int ORDER_TP;
+typedef size_t SIZE;
 
 #ifndef FALSE
 #define FALSE 0

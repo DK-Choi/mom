@@ -21,12 +21,17 @@ int main() {
     QUEUE queues[10];
     char rs_nm[256];
     RESULT_DETAIL_T result_detail;
+
     for (int i = 0; i < 10; i++) {
         sprintf(rs_nm, "rs_%d", i);
+        printf("-------\n");
         RESOURCE resource = mom_create_resource_shm(rs_nm, MAX_CAPACITY);
         queues[i] = mom_create_shared_queue(resource, 1000000, FALSE, &result_detail);
+        int x = mom_clear_shared_queue(queues[i], &result_detail);
+        printf("%d\n", x);
         //mom_destroy_resource(resource);
     }
+
     //exit(1);
 
     //RESOURCE_T* p_res = create_resource_shm("b",1000000L);
@@ -89,16 +94,19 @@ int main() {
     for (int i = 0; i < 10; i++) {
         for (;;) {
 
-            DATA data = mom_poll_shared_queue(queues[i], 1, &result_detail);
-            if (data != NULL) {
-                //printf("[%d]=====>>[%s]\n", i, data->data);
-                mom_destroy_shared_data(data, &result_detail);
-                //sleep(1);
-                cnt++;
-            } else {
-                printf("poll end [%d]\n", i);
-                break;
-            }
+            int x = mom_clear_shared_queue(queues[i], &result_detail);
+            printf("%d\n", x);
+
+//            DATA data = mom_poll_shared_queue(queues[i], 1, &result_detail);
+//            if (data != NULL) {
+//                //printf("[%d]=====>>[%s]\n", i, data->data);
+//                mom_destroy_shared_data(data, &result_detail);
+//                //sleep(1);
+//                cnt++;
+//            } else {
+//                printf("poll end [%d]\n", i);
+//                break;
+//            }
         }
     }
     time(&tm2);

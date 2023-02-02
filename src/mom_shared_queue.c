@@ -275,7 +275,7 @@ RESULT mom_clear_shared_queue(QUEUE this, RESULT_DETAIL result) {
                            result, FAIL_LOCK, "queue is busy");
 
     index_info_t *p_index_info = NULL;
-    for (p_index_info = get_index_addr(this->collection, this->header->start); p_index_info->next >= 0;) {
+    for (p_index_info = get_index_addr(this->collection, this->header->start); p_index_info != NULL && p_index_info->next >= 0;) {
 
         index_info_t *p_temp = get_index_addr(this->collection, p_index_info->next);
 

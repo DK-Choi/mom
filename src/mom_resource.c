@@ -156,7 +156,7 @@ RESULT mom_destroy_resource(RESOURCE this) {
 
     mom_concurrent_destroy(&this->concurrent);
 
-    free(this);
+    //free(this);
 
     return SUCCESS;
 

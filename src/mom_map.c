@@ -179,7 +179,7 @@ RESULT mom_map_put(HANDLE hndl, STRING key, ADDRESS data, size_t sz, COLLECTION_
         ASSERT_ADDRESS(bucket->slot_hndl, FAIL_NULL, RESULT);
     }
 
-    ASSERT (pthread_rwlock_trywrlock(&bucket->lock) != 0, FAIL_LOCK, RESULT);
+    ASSERT (pthread_rwlock_trywrlock(&bucket->lock) == EXIT_SUCCESS, FAIL_LOCK, RESULT);
 
     if ((rc = mom_list_search(bucket->slot_hndl, (void *) key, __comp_key__, (void **) &map_data, &map_sz)) ==
         SUCCESS) {

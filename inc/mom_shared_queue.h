@@ -27,7 +27,8 @@ typedef QUEUE_T *QUEUE;
 extern "C" {
 #endif
 
-QUEUE mom_create_shared_queue(RESOURCE resource, size_t max_size, BOOL recreate_mode, RESULT_DETAIL result_detail);
+QUEUE mom_create_shared_queue(RESOURCE resource, size_t max_size, size_t chunk_size, BOOL recreate_mode,
+                              RESULT_DETAIL result_detail);
 
 RESULT mom_destroy_shared_queue(QUEUE this, RESULT_DETAIL result_detail);
 

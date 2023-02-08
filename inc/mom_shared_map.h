@@ -36,7 +36,8 @@ typedef MAP_T *MAP;
 extern "C" {
 #endif
 
-MAP mom_create_shared_map(RESOURCE resource, size_t max_size, BOOL recreate_mode, RESULT_DETAIL result_detail);
+MAP mom_create_shared_map(RESOURCE resource, size_t max_size, size_t chunk_size, BOOL recreate_mode,
+                          RESULT_DETAIL result_detail);
 
 RESULT mom_destroy_shared_map(MAP this, RESULT_DETAIL result_detail);
 

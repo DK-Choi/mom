@@ -23,9 +23,9 @@ long mom_add_shared_queue(QUEUE this, ADDRESS data, size_t size, RESULT_DETAIL r
     index_info_t *p_index_info = hi_alloc(this->collection);
 
     if (p_index_info != NULL) {
-        data_info_t *p_data_info = hd_alloc(this->collection, sizeof(DATA_T) + size);
-        if (p_data_info != NULL) {
-            p_index_info->data = get_data_offset(this->collection, p_data_info);
+        data_t *p_data = hd_alloc(this->collection, sizeof(DATA_T) + size);
+        if (p_data != NULL) {
+            p_index_info->data = get_data_offset(this->collection, p_data);
 
             OFFSET curr_offset = get_index_offset(this->collection, p_index_info);
             if (this->header->last >= 0) {
@@ -80,9 +80,9 @@ long mom_push_shared_queue(QUEUE this, ADDRESS data, size_t size, RESULT_DETAIL 
     index_info_t *p_index_info = hi_alloc(this->collection);
     if (p_index_info != NULL) {
 
-        data_info_t *p_data_info = hd_alloc(this->collection, sizeof(DATA_T) + size);
-        if (p_data_info != NULL) {
-            p_index_info->data = get_data_offset(this->collection, p_data_info);
+        data_t *p_data = hd_alloc(this->collection, sizeof(DATA_T) + size);
+        if (p_data != NULL) {
+            p_index_info->data = get_data_offset(this->collection, p_data);
             if (this->header->start >= 0) {
                 p_index_info->next = this->header->start;
             }
@@ -146,7 +146,7 @@ static DATA __mom_poll_shared_queue__(QUEUE this, TIMESTAMP timeout, BOOL nowait
 
         mom_concurrent_rwunlock(&this->header->concurrent);
 
-        data_info_t *p_data = get_data_addr(this->collection, p_index_info->data);
+        data_t *p_data = get_data_addr(this->collection, p_index_info->data);
         DATA data = NULL;
         if (p_data != NULL) {
             data = mom_create_shared_data(((DATA_T *) p_data->data)->size, FALSE, result);
@@ -193,7 +193,7 @@ DATA mom_get_shared_queue(QUEUE this, int idx, RESULT_DETAIL result) {
         }
 
         DATA data = NULL;
-        data_info_t *p_data = get_data_addr(this->collection, p_index_info->data);
+        data_t *p_data = get_data_addr(this->collection, p_index_info->data);
         if (p_data != NULL) {
             data = mom_create_shared_data(((DATA) p_data->data)->size, FALSE, result);
             if (data != NULL) {
@@ -250,7 +250,7 @@ DATA mom_remove_shared_queue(QUEUE this, int idx, RESULT_DETAIL result) {
             return NULL;
         }
 
-        data_info_t *p_data = get_data_addr(this->collection, p_index_info->data);
+        data_t *p_data = get_data_addr(this->collection, p_index_info->data);
         DATA data = NULL;
         if (p_data != NULL) {
             data = mom_create_shared_data(((DATA_T *) p_data->data)->size, FALSE, result);
@@ -275,7 +275,8 @@ RESULT mom_clear_shared_queue(QUEUE this, RESULT_DETAIL result) {
                            result, FAIL_LOCK, "queue is busy");
 
     index_info_t *p_index_info = NULL;
-    for (p_index_info = get_index_addr(this->collection, this->header->start); p_index_info != NULL && p_index_info->next >= 0;) {
+    for (p_index_info = get_index_addr(this->collection, this->header->start);
+         p_index_info != NULL && p_index_info->next >= 0;) {
 
         index_info_t *p_temp = get_index_addr(this->collection, p_index_info->next);
 
@@ -308,13 +309,17 @@ long mom_size_shared_queue(QUEUE this, RESULT_DETAIL result) {
 
 }
 
-QUEUE mom_create_shared_queue(RESOURCE resource, size_t max_size, BOOL recreate_mode, RESULT_DETAIL result) {
+QUEUE mom_create_shared_queue(RESOURCE resource, size_t max_size, size_t chunk_size, BOOL recreate_mode,
+                              RESULT_DETAIL result) {
 
     QUEUE this = NULL;
 
     ASSERT_AND_SET_RESULT(ASSERT_ADDRESS_COND(resource), NULL, ADDRESS, result, FAIL_UNDEF, "undefined resource");
     ASSERT_AND_SET_RESULT(ASSERT_SIZE_COND(max_size), NULL, ADDRESS, result, FAIL_INVALID_SIZE, "check max size (%zu)",
                           max_size);
+    ASSERT_AND_SET_RESULT(ASSERT_CHUNK_COND(chunk_size), NULL, ADDRESS, result, FAIL_INVALID_SIZE,
+                          "check chunk size (%zu)",
+                          chunk_size);
     ASSERT_AND_SET_RESULT (mom_concurrent_lock(&resource->concurrent, FALSE) == SUCCESS, NULL, ADDRESS,
                            result, FAIL_LOCK, "queue is busy");
 
@@ -334,7 +339,7 @@ QUEUE mom_create_shared_queue(RESOURCE resource, size_t max_size, BOOL recreate_
                                        result, FAIL_RESOURCE_INSUFFICIENT, "malloc fail");
 
     memset(this, 0x00, sizeof(QUEUE_T));
-    this->collection = mom_create_collection(resource, max_size, sizeof(QUEUE_HEADER_T));
+    this->collection = mom_create_collection(resource, max_size, chunk_size, sizeof(QUEUE_HEADER_T));
     ASSERT_IF_FAIL_CALL_AND_SET_RESULT (ASSERT_ADDRESS_COND(this->collection),
                                         mom_destroy_shared_queue(this, result); mom_concurrent_unlock(
                                                 &resource->concurrent),
@@ -353,6 +358,7 @@ QUEUE mom_create_shared_queue(RESOURCE resource, size_t max_size, BOOL recreate_
         this->header->last = INIT_OFFSET;
         this->header->cnt = 0;
         this->header->resource_cache.max_size = max_size;
+        this->header->resource_cache.chunk_size = chunk_size;
         RESULT rc;
         ASSERT_IF_FAIL_CALL_AND_SET_RESULT ((rc = mom_concurrent_init(&this->header->concurrent, TRUE)) == SUCCESS,
                                             mom_destroy_shared_queue(this, result); mom_concurrent_unlock(

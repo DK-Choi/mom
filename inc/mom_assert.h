@@ -13,6 +13,9 @@
 #define MAX_SIZE 0x400000
 #define MIN_SIZE 0x1
 
+#define MAX_CHUNK 0x1000
+#define MIN_CHUNK 0x80
+
 #define MAX_IDX __INT_MAX__
 #define MIN_IDX 0
 
@@ -21,6 +24,7 @@
 #define ASSERT_ADDRESS_COND(value)          ((value) != NULL)
 #define ASSERT_CAPACITY_COND(value)         ((value) >= MIN_CAPACITY && (value) <= MAX_CAPACITY)
 #define ASSERT_SIZE_COND(value)             ((value) >= MIN_SIZE && (value) <= MAX_SIZE)
+#define ASSERT_CHUNK_COND(value)            ((value) >= MIN_CHUNK && (value) <= MAX_CHUNK)
 #define ASSERT_NOT_EMPTY_STRING_COND(value) ((value) != NULL && strlen(value) > 0)
 #define ASSERT_INDEX_COND(value)            ((value) >= MIN_IDX && (value) <= MAX_IDX)
 #define ASSERT_OFFSET_COND(value)           ((value) >= 0)

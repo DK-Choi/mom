@@ -32,7 +32,7 @@ index_info_t *__remove_shared_map__(MAP this, STRING key, BUCKET bucket, RESULT_
     if (bucket->cnt > 0) {
         index_info_t *p_index_info = get_index_addr(this->collection, bucket->start);
         for (; p_index_info != NULL; p_index_info = get_index_addr(this->collection, p_index_info->next)) {
-            data_info_t *p_data_info = get_data_addr(this->collection, p_index_info->data);
+            data_t *p_data_info = get_data_addr(this->collection, p_index_info->data);
             if (p_data_info != NULL) {
                 if (strncmp(((MAP_DATA_T *) p_data_info->data)->key, key, MAX_NAME_SZ) == 0) {
                     break;
@@ -66,9 +66,9 @@ MAP_DATA mom_remove_shared_map(MAP this, STRING key, RESULT_DETAIL result) {
 
         index_info_t *p_p_index_info = NULL;
         for (; p_index_info != NULL; p_index_info = get_index_addr(this->collection, p_index_info->next)) {
-            data_info_t *p_data_info = get_data_addr(this->collection, p_index_info->data);
-            if (p_data_info != NULL) {
-                if (strncmp(((MAP_DATA_T *) p_data_info->data)->key, key, MAX_NAME_SZ) == 0) {
+            data_t *p_data = get_data_addr(this->collection, p_index_info->data);
+            if (p_data != NULL) {
+                if (strncmp(((MAP_DATA_T *) p_data->data)->key, key, MAX_NAME_SZ) == 0) {
                     if (p_p_index_info != NULL) {
                         p_p_index_info->next = p_index_info->next;
                         if (p_p_index_info->next < 0) {
@@ -93,7 +93,7 @@ MAP_DATA mom_remove_shared_map(MAP this, STRING key, RESULT_DETAIL result) {
         if (p_index_info == NULL) {
             return &empty_map;
         }
-        data_info_t *p_data = get_data_addr(this->collection, p_index_info->data);
+        data_t *p_data = get_data_addr(this->collection, p_index_info->data);
         MAP_DATA data = NULL;
         if (p_data != NULL) {
             data = (MAP_DATA) mom_create_shared_data(((MAP_DATA_T *) p_data->data)->size, TRUE, result);
@@ -132,9 +132,9 @@ RESULT mom_put_shared_map(MAP this, STRING key, ADDRESS data, size_t size, RESUL
     }
 
     if (p_index_info != NULL) {
-        data_info_t *p_data_info = hd_alloc(this->collection, sizeof(MAP_DATA_T) + size);
-        if (p_data_info != NULL) {
-            p_index_info->data = get_data_offset(this->collection, p_data_info);
+        data_info_t *p_data = hd_alloc(this->collection, sizeof(MAP_DATA_T) + size);
+        if (p_data != NULL) {
+            p_index_info->data = get_data_offset(this->collection, p_data);
 
             if (exist == FALSE) {
                 OFFSET curr_offset = get_index_offset(this->collection, p_index_info);
@@ -188,10 +188,10 @@ MAP_DATA mom_get_shared_map(MAP this, STRING key, RESULT_DETAIL result) {
         for (p_index_info = get_index_addr(this->collection, bucket->start);
              p_index_info->next >= 0; p_index_info = get_index_addr(this->collection, p_index_info->next)) {
 
-            data_info_t *p_data_info = get_data_addr(this->collection, p_index_info->data);
+            data_t *p_data = get_data_addr(this->collection, p_index_info->data);
 
-            if (p_data_info != NULL) {
-                if (strncmp(((MAP_DATA_T *) p_data_info->data)->key, key, MAX_NAME_SZ) == 0) {
+            if (p_data != NULL) {
+                if (strncmp(((MAP_DATA_T *) p_data->data)->key, key, MAX_NAME_SZ) == 0) {
                     break;
                 }
             }
@@ -202,7 +202,7 @@ MAP_DATA mom_get_shared_map(MAP this, STRING key, RESULT_DETAIL result) {
             return &empty_map;
         }
 
-        data_info_t *p_data = get_data_addr(this->collection, p_index_info->data);
+        data_t *p_data = get_data_addr(this->collection, p_index_info->data);
         MAP_DATA data = NULL;
         if (p_data != NULL) {
             data = (MAP_DATA) mom_create_shared_data(((MAP_DATA_T *) p_data->data)->size, TRUE, result);
@@ -278,13 +278,15 @@ long mom_size_shared_map(MAP this, RESULT_DETAIL result) {
 }
 
 
-MAP mom_create_shared_map(RESOURCE resource, size_t max_size, BOOL recreate_mode, RESULT_DETAIL result) {
+MAP mom_create_shared_map(RESOURCE resource, size_t max_size, size_t chunk_size, BOOL recreate_mode, RESULT_DETAIL result) {
 
     MAP this = NULL;
 
     ASSERT_AND_SET_RESULT(ASSERT_ADDRESS_COND(resource), NULL, ADDRESS, result, FAIL_UNDEF, "undefined resource");
     ASSERT_AND_SET_RESULT(ASSERT_SIZE_COND(max_size), NULL, ADDRESS, result, FAIL_INVALID_SIZE, "check max size (%zu)",
                           max_size);
+    ASSERT_AND_SET_RESULT(ASSERT_CHUNK_COND(chunk_size), NULL, ADDRESS, result, FAIL_INVALID_SIZE, "check chunk size (%zu)",
+                          chunk_size);
     ASSERT_AND_SET_RESULT(mom_concurrent_lock(&resource->concurrent, FALSE) == SUCCESS, NULL, ADDRESS,
                           result, FAIL_LOCK, "queue is busy");
 
@@ -304,7 +306,7 @@ MAP mom_create_shared_map(RESOURCE resource, size_t max_size, BOOL recreate_mode
 
 
     memset(this, 0x00, sizeof(MAP_T));
-    this->collection = mom_create_collection(resource, max_size, sizeof(MAP_HEADER_T));
+    this->collection = mom_create_collection(resource, max_size, chunk_size, sizeof(MAP_HEADER_T));
     ASSERT_IF_FAIL_CALL_AND_SET_RESULT (ASSERT_ADDRESS_COND(this->collection),
                                         mom_destroy_shared_map(this, result); mom_concurrent_unlock(
                                                 &resource->concurrent),
@@ -320,6 +322,7 @@ MAP mom_create_shared_map(RESOURCE resource, size_t max_size, BOOL recreate_mode
     if ((TRUE == recreate_mode && this->header->resource_cache.max_size != max_size) || this->header->c_use != USE) {
         this->header->c_use = USE;
         this->header->resource_cache.max_size = max_size;
+        this->header->resource_cache.chunk_size = chunk_size;
         for (int i = 0; i < BUCKET_SIZE; i++) {
             __init_bucket__(&this->header->bucket[i]);
         }

@@ -9,6 +9,7 @@ typedef struct COLLECTION_H{
     size_t  header_size;
     size_t  max_size;
     size_t  max_data_size;
+    size_t  chunk_size;
 	ADDRESS header_base;
     ADDRESS index_base;
     ADDRESS data_base;
@@ -21,6 +22,7 @@ typedef struct COLLECTION_H{
 
 typedef struct  {
     size_t max_size;
+    size_t chunk_size;
     size_t next_index_cache[ALLOC_CACHE_SIZE];
     size_t next_data_cache[ALLOC_CACHE_SIZE];
     int next_index_pos;
@@ -37,6 +39,7 @@ extern "C" {
 
 COLLECTION mom_create_collection(RESOURCE resource
 								, size_t max_size
+                                , size_t chunk_size
 								, size_t header_size);
 								
 RESULT mom_destroy_collection(COLLECTION this);

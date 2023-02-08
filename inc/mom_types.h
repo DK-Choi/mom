@@ -24,7 +24,7 @@ enum CONCURRENT_TYPE {
 
 #define ORDER_ASC  1
 #define ORDER_DSC  -1
-#define MAX_NAME_SZ 255
+#define MAX_NAME_SZ 64
 #define ALLOC_CACHE_SIZE 256
 #define MAX_PID_SZ 16
 

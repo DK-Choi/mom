@@ -147,7 +147,7 @@ int main() {
     time(&tm);
 
     //for(int j=0;j<1000;j++) {
-    for (int i = 0; i < 2000; i++) {
+    for (int i = 0; i < 10; i++) {
         char key[32];
         sprintf(key, "%d", i);
         mom_put_shared_map(map, key, x, strlen(x), &result_detail);
@@ -174,13 +174,15 @@ int main() {
 
     //for(int j=0;j<100;j++) {
 
-    for (int i = 0; i < 2000; i++) {
+    int rcnt = 0;
+    for (int i = 0; i < 10; i++) {
         char key[32];
         sprintf(key, "%d", i);
         MAP_DATA map_data = mom_get_shared_map(map, key, &result_detail);
 
         if (map_data != NULL) {
-            printf("%s %zu\n", (STRING) map_data->data, map_data->size);
+            printf("%s %s %zu\n", key, (STRING) map_data->data, map_data->size);
+            rcnt++;
         }
 
 //        printf("%s %zu\n", result_detail.message, result_detail.code);
@@ -197,18 +199,27 @@ int main() {
     time(&tm2);
     printf("%d \n", (tm2 - tm));
 
-    printf("===OK\n");
+    printf("===OK %d\n", rcnt);
 
-    printf("%d\n", mom_size_shared_map(map, &result_detail));
+    mom_remove_shared_map(map,"0", &result_detail);
 
-    MAP_KEYS rtn = mom_get_shared_map_keys(map,&result_detail);
+    for(int k=0;k<10;k++) {
 
-    for(int i=0;i<rtn->cnt;i++) {
-        printf("%s\n", rtn->keys[i]);
+        printf("%d\n", mom_size_shared_map(map, &result_detail));
+
+        MAP_KEYS rtn = mom_get_shared_map_keys(map, &result_detail);
+        printf("%d\n", rtn->cnt);
+        for (int i = 0; i < rtn->cnt; i++) {
+            //printf("%s\n", rtn->keys[i]);
+        }
+
+        mom_free_shared_map_keys(rtn);
+
+        sleep(1);
+
+        int ss = mom_expire_shared_map(map,4,&result_detail);
+        printf("expr %d\n", ss);
     }
-
-    mom_free_shared_map_keys(rtn);
-
 
     mom_destroy_shared_map(map, &result_detail);
 

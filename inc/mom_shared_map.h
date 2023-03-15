@@ -51,7 +51,7 @@ RESULT mom_put_shared_map(MAP this, STRING key, ADDRESS data, size_t size, RESUL
 
 MAP_DATA mom_get_shared_map(MAP this, STRING key, RESULT_DETAIL result_detail);
 
-long mom_size_shared_map(MAP this, RESULT_DETAIL result_detail);
+size_t mom_size_shared_map(MAP this, RESULT_DETAIL result_detail);
 
 MAP_DATA mom_remove_shared_map(MAP this, STRING key, RESULT_DETAIL result_detail);
 
@@ -60,6 +60,8 @@ RESULT mom_clear_shared_map(MAP this, RESULT_DETAIL result_detail);
 MAP_KEYS mom_get_shared_map_keys(MAP this, RESULT_DETAIL result_detail);
 
 void mom_free_shared_map_keys(MAP_KEYS keys);
+
+size_t mom_expire_shared_map(MAP this, time_t expire, RESULT_DETAIL result_detail);
 
 #ifdef  __cplusplus
 extern }

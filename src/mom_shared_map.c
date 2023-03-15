@@ -11,6 +11,7 @@
 
 MAP_DATA_T empty_map = {0, 0, NULL, {0x00}};
 
+
 static BUCKET __get_bucket__(MAP this, STRING key) {
     return &this->header->bucket[mom_get_hash_idx(key, BUCKET_SIZE)];
 }
@@ -69,20 +70,6 @@ MAP_DATA mom_remove_shared_map(MAP this, STRING key, RESULT_DETAIL result) {
             data_t *p_data = get_data_addr(this->collection, p_index_info->data);
             if (p_data != NULL) {
                 if (strncmp(((MAP_DATA_T *) p_data->data)->key, key, MAX_NAME_SZ) == 0) {
-                    if (p_p_index_info != NULL) {
-                        p_p_index_info->next = p_index_info->next;
-                        if (p_p_index_info->next < 0) {
-                            bucket->last = get_index_offset(this->collection, p_p_index_info);
-                        }
-                    } else {
-                        if (p_index_info->next >= 0) {
-                            bucket->start = p_index_info->next;
-                        } else {
-                            bucket->start = INIT_OFFSET;
-                            bucket->last = INIT_OFFSET;
-                        }
-                    }
-                    bucket->cnt--;
                     break;
                 }
             }
@@ -96,6 +83,20 @@ MAP_DATA mom_remove_shared_map(MAP this, STRING key, RESULT_DETAIL result) {
         data_t *p_data = get_data_addr(this->collection, p_index_info->data);
         MAP_DATA data = NULL;
         if (p_data != NULL) {
+            if (p_p_index_info != NULL) {
+                p_p_index_info->next = p_index_info->next;
+                if (p_p_index_info->next < 0) {
+                    bucket->last = get_index_offset(this->collection, p_p_index_info);
+                }
+            } else {
+                if (p_index_info->next >= 0) {
+                    bucket->start = p_index_info->next;
+                } else {
+                    bucket->start = INIT_OFFSET;
+                    bucket->last = INIT_OFFSET;
+                }
+            }
+            bucket->cnt--;
             data = (MAP_DATA) mom_create_shared_data(((MAP_DATA_T *) p_data->data)->size, TRUE, result);
             if (data != NULL) {
                 read_data(this->collection, p_index_info->data, (DATA) data, TRUE, sizeof(MAP_DATA_T));
@@ -264,7 +265,7 @@ RESULT mom_clear_shared_map(MAP this, RESULT_DETAIL result) {
 
 }
 
-long mom_size_shared_map(MAP this, RESULT_DETAIL result) {
+size_t mom_size_shared_map(MAP this, RESULT_DETAIL result) {
 
     ASSERT_AND_SET_RESULT(ASSERT_ADDRESS_COND(this), SZ_ERR, long, result, FAIL_UNDEF, "undefined map");
 
@@ -376,7 +377,6 @@ RESULT mom_destroy_shared_map(MAP this, RESULT_DETAIL result) {
 MAP_KEYS mom_get_shared_map_keys(MAP this, RESULT_DETAIL result) {
 
     ASSERT_AND_SET_RESULT(ASSERT_ADDRESS_COND(this), NULL, ADDRESS, result, FAIL_UNDEF, "undefined map");
-    RESULT res;
 
     MAP_KEYS rtn = (MAP_KEYS) malloc(sizeof(MAP_KEYS_T));
 
@@ -390,10 +390,9 @@ MAP_KEYS mom_get_shared_map_keys(MAP this, RESULT_DETAIL result) {
 
             index_info_t *p_index_info = NULL;
             for (p_index_info = get_index_addr(this->collection, bucket->start);
-                 p_index_info->next >= 0; p_index_info = get_index_addr(this->collection, p_index_info->next)) {
+                 p_index_info->next > INIT_OFFSET; p_index_info = get_index_addr(this->collection, p_index_info->next)) {
 
                 data_t *p_data = get_data_addr(this->collection, p_index_info->data);
-
                 if (p_data != NULL) {
                     rtn->keys[rtn->cnt] = malloc(sizeof(char *) * strlen(((MAP_DATA_T *) p_data->data)->key));
                     strcpy(rtn->keys[rtn->cnt], ((MAP_DATA_T *) p_data->data)->key);
@@ -401,10 +400,15 @@ MAP_KEYS mom_get_shared_map_keys(MAP this, RESULT_DETAIL result) {
                 }
             }
 
-            mom_concurrent_rwunlock(&bucket->concurrent);
-            if (p_index_info == NULL) {
-                return &empty_map;
+            if (p_index_info != NULL) {
+                data_t *p_data = get_data_addr(this->collection, p_index_info->data);
+                if (p_data != NULL) {
+                    rtn->keys[rtn->cnt] = malloc(sizeof(char *) * strlen(((MAP_DATA_T *) p_data->data)->key));
+                    strcpy(rtn->keys[rtn->cnt], ((MAP_DATA_T *) p_data->data)->key);
+                    rtn->cnt++;
+                }
             }
+            mom_concurrent_rwunlock(&bucket->concurrent);
         }
     }
     return rtn;
@@ -419,3 +423,66 @@ void mom_free_shared_map_keys(MAP_KEYS keys) {
         free(keys);
     }
 }
+
+size_t __expire__(MAP this, time_t expire, size_t sz, time_t tm, BUCKET bucket, index_info_t *p_p_index_info,
+              const index_info_t *p_index_info, data_t *p_data) {
+    if ((tm - ((MAP_DATA_T *) p_data->data)->time) > expire) {
+        if (p_p_index_info != NULL) {
+            p_p_index_info->next = p_index_info->next;
+            if (p_p_index_info->next < 0) {
+                bucket->last = get_index_offset(this->collection, p_p_index_info);
+            }
+        } else {
+            if (p_index_info->next >= 0) {
+                bucket->start = p_index_info->next;
+            } else {
+                bucket->start = INIT_OFFSET;
+                bucket->last = INIT_OFFSET;
+            }
+        }
+        bucket->cnt--;
+        hd_free(this->collection, p_data);
+        sz++;
+    }
+    return sz;
+}
+
+size_t mom_expire_shared_map(MAP this, time_t expire, RESULT_DETAIL result) {
+
+    ASSERT_AND_SET_RESULT(ASSERT_ADDRESS_COND(this), -1, SIZE, result, FAIL_UNDEF, "undefined map");
+    ASSERT_AND_SET_RESULT(expire > 0, -1, SIZE, result, FAIL_INVALID_SIZE, "greater than 0")
+
+    size_t sz = 0;
+    time_t tm;
+    time(&tm);
+
+    for (int i = 0; i < BUCKET_SIZE; i++) {
+        BUCKET bucket = &this->header->bucket[i];
+        if (bucket->cnt > 0) {
+            ASSERT_AND_SET_RESULT (mom_concurrent_rdlock(&bucket->concurrent, FALSE) == SUCCESS, -1, SIZE,
+                                   result, FAIL_LOCK, "map is busy");
+
+            index_info_t *p_p_index_info = NULL;
+            index_info_t *p_index_info = NULL;
+            for (p_index_info = get_index_addr(this->collection, bucket->start);
+                 p_index_info->next > INIT_OFFSET; p_index_info = get_index_addr(this->collection, p_index_info->next)) {
+
+                data_t *p_data = get_data_addr(this->collection, p_index_info->data);
+                if (p_data != NULL) {
+                    sz = __expire__(this, expire, sz, tm, bucket, p_p_index_info, p_index_info, p_data);
+                }
+            }
+
+            if (p_index_info != NULL) {
+                data_t *p_data = get_data_addr(this->collection, p_index_info->data);
+                if (p_data != NULL) {
+                    sz = __expire__(this, expire, sz, tm, bucket, p_p_index_info, p_index_info, p_data);
+                }
+            }
+            mom_concurrent_rwunlock(&bucket->concurrent);
+        }
+    }
+    return sz;
+}
+
+

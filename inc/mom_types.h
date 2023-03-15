@@ -38,6 +38,7 @@ typedef unsigned long CAPACITY;
 typedef int COLLECTION_TP;
 typedef int ORDER_TP;
 typedef size_t SIZE;
+typedef char** STRINGS;
 
 #ifndef FALSE
 #define FALSE 0

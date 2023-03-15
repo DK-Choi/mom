@@ -5,11 +5,13 @@
 
 typedef struct {
     size_t size;
+    time_t time;
     ADDRESS data;
 } DATA_T;
 
 typedef struct {
     size_t size;
+    time_t time;
     ADDRESS data;
     char key[MAX_NAME_SZ + 1];
 } MAP_DATA_T;

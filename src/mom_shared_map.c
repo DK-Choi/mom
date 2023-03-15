@@ -9,7 +9,7 @@
 #include "mom_shared_map.h"
 #include "mom_collection_core.c"
 
-MAP_DATA_T empty_map = {0, NULL, {0x00}};
+MAP_DATA_T empty_map = {0, 0, NULL, {0x00}};
 
 static BUCKET __get_bucket__(MAP this, STRING key) {
     return &this->header->bucket[mom_get_hash_idx(key, BUCKET_SIZE)];
@@ -278,14 +278,16 @@ long mom_size_shared_map(MAP this, RESULT_DETAIL result) {
 }
 
 
-MAP mom_create_shared_map(RESOURCE resource, size_t max_size, size_t chunk_size, BOOL recreate_mode, RESULT_DETAIL result) {
+MAP
+mom_create_shared_map(RESOURCE resource, size_t max_size, size_t chunk_size, BOOL recreate_mode, RESULT_DETAIL result) {
 
     MAP this = NULL;
 
     ASSERT_AND_SET_RESULT(ASSERT_ADDRESS_COND(resource), NULL, ADDRESS, result, FAIL_UNDEF, "undefined resource");
     ASSERT_AND_SET_RESULT(ASSERT_SIZE_COND(max_size), NULL, ADDRESS, result, FAIL_INVALID_SIZE, "check max size (%zu)",
                           max_size);
-    ASSERT_AND_SET_RESULT(ASSERT_CHUNK_COND(chunk_size), NULL, ADDRESS, result, FAIL_INVALID_SIZE, "check chunk size (%zu)",
+    ASSERT_AND_SET_RESULT(ASSERT_CHUNK_COND(chunk_size), NULL, ADDRESS, result, FAIL_INVALID_SIZE,
+                          "check chunk size (%zu)",
                           chunk_size);
     ASSERT_AND_SET_RESULT(mom_concurrent_lock(&resource->concurrent, FALSE) == SUCCESS, NULL, ADDRESS,
                           result, FAIL_LOCK, "queue is busy");
@@ -369,5 +371,51 @@ RESULT mom_destroy_shared_map(MAP this, RESULT_DETAIL result) {
                           "map destroy fail");
     free(this);
     return SUCCESS;
+}
 
+MAP_KEYS mom_get_shared_map_keys(MAP this, RESULT_DETAIL result) {
+
+    ASSERT_AND_SET_RESULT(ASSERT_ADDRESS_COND(this), NULL, ADDRESS, result, FAIL_UNDEF, "undefined map");
+    RESULT res;
+
+    MAP_KEYS rtn = (MAP_KEYS) malloc(sizeof(MAP_KEYS_T));
+
+    rtn->keys = malloc(sizeof(char *) * this->header->resource_cache.max_size);
+    rtn->cnt = 0;
+    for (int i = 0; i < BUCKET_SIZE; i++) {
+        BUCKET bucket = &this->header->bucket[i];
+        if (bucket->cnt > 0) {
+            ASSERT_AND_SET_RESULT (mom_concurrent_rdlock(&bucket->concurrent, FALSE) == SUCCESS, NULL, ADDRESS,
+                                   result, FAIL_LOCK, "map is busy");
+
+            index_info_t *p_index_info = NULL;
+            for (p_index_info = get_index_addr(this->collection, bucket->start);
+                 p_index_info->next >= 0; p_index_info = get_index_addr(this->collection, p_index_info->next)) {
+
+                data_t *p_data = get_data_addr(this->collection, p_index_info->data);
+
+                if (p_data != NULL) {
+                    rtn->keys[rtn->cnt] = malloc(sizeof(char *) * strlen(((MAP_DATA_T *) p_data->data)->key));
+                    strcpy(rtn->keys[rtn->cnt], ((MAP_DATA_T *) p_data->data)->key);
+                    rtn->cnt++;
+                }
+            }
+
+            mom_concurrent_rwunlock(&bucket->concurrent);
+            if (p_index_info == NULL) {
+                return &empty_map;
+            }
+        }
+    }
+    return rtn;
+}
+
+void mom_free_shared_map_keys(MAP_KEYS keys) {
+    if (keys != NULL) {
+        for (int i = 0; i < keys->cnt; i++) {
+            free(keys->keys[i]);
+        }
+        free(keys->keys);
+        free(keys);
+    }
 }

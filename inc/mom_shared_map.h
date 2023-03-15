@@ -29,6 +29,12 @@ typedef struct {
     COLLECTION collection;
 } MAP_T;
 
+typedef struct {
+    int cnt;
+    STRINGS keys;
+} MAP_KEYS_T;
+
+typedef MAP_KEYS_T *MAP_KEYS;
 
 typedef MAP_T *MAP;
 
@@ -50,6 +56,10 @@ long mom_size_shared_map(MAP this, RESULT_DETAIL result_detail);
 MAP_DATA mom_remove_shared_map(MAP this, STRING key, RESULT_DETAIL result_detail);
 
 RESULT mom_clear_shared_map(MAP this, RESULT_DETAIL result_detail);
+
+MAP_KEYS mom_get_shared_map_keys(MAP this, RESULT_DETAIL result_detail);
+
+void mom_free_shared_map_keys(MAP_KEYS keys);
 
 #ifdef  __cplusplus
 extern }

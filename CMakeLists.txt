@@ -36,4 +36,25 @@ target_link_libraries(${OUTPUT} PUBLIC ${LIB_NAME})
 # make install 설정, TARGETS 1, 2 ,3 = RUNTIME DESTINATION, LIBRARY DESTINATION, ARCHIVE DESTINATION
 install(TARGETS  ${OUTPUT} ${LIB_NAME}
         RUNTIME DESTINATION /Users/dk.choi/tst/bin
-        LIBRARY DESTINATION /Users/dk.choi/tst/lib)
+        LIBRARY DESTINATION ${CMAKE_LIBRARY_PATH})
+
+#set(APPS "mom.app")
+#
+## Directories to look for dependencies
+#set(DIRS ${CMAKE_LIBRARY_PATH})
+#
+#install(CODE "include(BundleUtilities)
+#    fixup_bundle(\"${APPS}\" \"\" \"${DIRS}\")")
+#
+#set(CPACK_GENERATOR Bundle)
+#set(CPACK_BUNDLE_NAME "_NAME_")
+#set(VERSION "0.1.1")
+#set(CPACK_PACKAGE_RELEASE 2)
+#set(CPACK_PACKAGE_VERSION ${VERSION})VERSION
+#set(CPACK_GENERATOR Bundle)
+#set(CPACK_BUNDLE_NAME "_NAME_")
+#set(CPACK_PACKAGE_CONTACT "developer")
+#set(CPACK_PACKAGING_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
+#set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CPACK_PACKAGE_RELEASE}.${CMAKE_SYSTEM_PROCESSOR}")
+
+#include(CPack)

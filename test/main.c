@@ -16,17 +16,21 @@
 
 int main() {
 
+
+
     time_t tm, tm2;
 
     QUEUE queues[10];
     char rs_nm[256];
+    char path[256];
     RESULT_DETAIL_T result_detail;
     char *x = "aklsjfklsjdflasjdlksjdflsajflsjflksjlfksjdflksjflksjdsldfkjsalkfjaslkdjflasdkjfalskfjslakfjlsjflksjdflkasjdflsjdflkjsdfljsflksjlfkjasdflkajsdflsjlfkjsdklfjsdlfkjslfkjslfdjsldkfjslkfjsldkjfsldkfjsldfj";
 
     for (int i = 0; i < 10; i++) {
         sprintf(rs_nm, "rs_%d", i);
+        sprintf(path, "/Users/dk.choi/qtest/store/rs_%d.m", i);
         printf("-------\n");
-        RESOURCE resource = mom_create_resource_local(rs_nm, MAX_CAPACITY);
+        RESOURCE resource = mom_create_resource_file(rs_nm, path, MAX_CAPACITY);
         queues[i] = mom_create_shared_queue(resource, 1000000, 128, FALSE, &result_detail);
         //int x = mom_clear_shared_queue(queues[i], &result_detail);
         //printf("%d\n", x);
@@ -96,7 +100,7 @@ int main() {
         for (;;) {
             DATA data = mom_poll_shared_queue(queues[i], 1, &result_detail);
             if (data != NULL) {
-                printf("[%d]=====>>[%s]\n", i, data->data);
+                //printf("[%d]=====>>[%s]\n", i, data->data);
                 mom_destroy_shared_data(data, &result_detail);
                 //sleep(1);
                 cnt++;
@@ -143,7 +147,7 @@ int main() {
     time(&tm);
 
     //for(int j=0;j<1000;j++) {
-    for (int i = 0; i < 200000; i++) {
+    for (int i = 0; i < 2000; i++) {
         char key[32];
         sprintf(key, "%d", i);
         mom_put_shared_map(map, key, x, strlen(x), &result_detail);
@@ -170,7 +174,7 @@ int main() {
 
     //for(int j=0;j<100;j++) {
 
-    for (int i = 0; i < 200000; i++) {
+    for (int i = 0; i < 2000; i++) {
         char key[32];
         sprintf(key, "%d", i);
         MAP_DATA map_data = mom_get_shared_map(map, key, &result_detail);
@@ -196,6 +200,15 @@ int main() {
     printf("===OK\n");
 
     printf("%d\n", mom_size_shared_map(map, &result_detail));
+
+    MAP_KEYS rtn = mom_get_shared_map_keys(map,&result_detail);
+
+    for(int i=0;i<rtn->cnt;i++) {
+        printf("%s\n", rtn->keys[i]);
+    }
+
+    mom_free_shared_map_keys(rtn);
+
 
     mom_destroy_shared_map(map, &result_detail);
 
